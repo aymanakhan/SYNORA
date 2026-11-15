@@ -164,6 +164,15 @@ export interface RuleFinding {
   nextStep: NextStepCategory;
 }
 
+/** Wellbeing signals from recent self-reports/check-ins (not clinical findings). */
+export type CheckInFlag =
+  | 'short-sleep'
+  | 'poor-sleep-quality'
+  | 'low-energy'
+  | 'high-stress'
+  | 'low-mood'
+  | 'symptoms-reported';
+
 export interface AssessmentResult {
   status: AssessmentStatus;
   assessedAt: string;
@@ -178,6 +187,8 @@ export interface AssessmentResult {
   nextStep: NextStepCategory;
   /** True if any input reading was synthetic. */
   basedOnSyntheticData: boolean;
+  /** Recent self-report signals; used by the pet's `tired` state. */
+  checkInFlags: CheckInFlag[];
 }
 
 // ---------------------------------------------------------------------------

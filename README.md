@@ -24,8 +24,9 @@ No accounts, API keys, or network access are needed for the demo.
 | App shell, design tokens, Demo Mode banner | ✅ done |
 | Shared data contract (`src/features/health/types.ts`) | ✅ done |
 | Measurement validation + unit normalization (+ tests) | ✅ done |
+| Assessment engine (demo rules, personal baseline, unknown handling) + tests | ✅ done |
+| Pet wellness mapping (happy / tired / concerned / unknown) + tests | ✅ done |
 | Storage (IndexedDB), ingestion pipeline | ⏳ next |
-| Assessment engine | ⏳ next |
 | Live Monitoring, dashboard, charts | ⏳ planned |
 | Pet companion (cat / dog / axolotl) | ⏳ planned |
 | 180-day mission simulator | ⏳ planned |
@@ -46,6 +47,8 @@ pet commands (buttons → later gesture/voice) → animation only, never health 
 |---|---|
 | `src/features/health/types.ts` | Shared contract: `Measurement`, `CheckIn`, `AssessmentResult`, pet types. **Coordinate before changing.** |
 | `src/features/health/metrics.ts` | Metric catalog: units, hazards, input plausibility limits (not clinical thresholds) |
+| `src/features/health/assessment/` | `assess()` — the single pure assessment engine; `rules.ts` holds all demonstration-only thresholds |
+| `src/features/pets/wellness.ts` | `derivePetWellness()` — pet mood from the assessment result only |
 | `src/services/ingestion/` | `validateMeasurement()` — the single entry point for every data source |
 | `src/theme/tokens.ts`, `src/index.css` | Design tokens |
 | `resources/nasa/reference-links.md` | Sources and review status |
