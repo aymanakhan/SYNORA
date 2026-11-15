@@ -17,6 +17,8 @@ npm run build      # type-check + production build
 
 No accounts, API keys, or network access are needed for the demo.
 
+**Offline:** `npm run build && npm run preview`, open the app once, and it will then reload with the network off (a service worker caches the app shell; health data stays in IndexedDB). The dev server (`npm run dev`) is deliberately not cached.
+
 ## Judge demo (about 3 minutes)
 
 1. Open the app. **No login.** Choose a **cat, dog, or axolotl** and name it, then click *Start demo mission*.
@@ -44,7 +46,8 @@ No accounts, API keys, or network access are needed for the demo.
 | 180-day mission simulator, 5 scenarios, timeline preview | ✅ |
 | Daily check-in, trends charts, mission summary | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
-| Offline PWA build, Auth0, camera gestures, voice, sound | stretch |
+| Offline reload via service worker (production build; tested with network off) | ✅ |
+| Auth0, camera gestures, voice, sound | stretch |
 
 ## Architecture
 
