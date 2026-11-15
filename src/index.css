@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-space: #0b1020;
+  --color-navy: #111827;
+  --color-panel: #172033;
+  --color-card: #1e293b;
+  --color-cyan: #38bdf8;
+  --color-teal: #2dd4bf;
+  --color-mint: #86efac;
+  --color-purple: #a78bfa;
+  --color-stable: #22c55e;
+  --color-review: #facc15;
+  --color-attention: #f97316;
+  --color-unknown: #94a3b8;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+
+  --font-sans: Inter, 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Placeholder until a licensed, self-hosted pixel font is added. Headings/branding only. */
+  --font-pixel: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-space);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
