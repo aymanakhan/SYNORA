@@ -12,14 +12,17 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "idb": "^8.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.10",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.5.2",
+    "fake-indexeddb": "^6.0.0",
     "tailwindcss": "^4.1.10",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",

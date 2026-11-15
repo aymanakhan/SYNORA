@@ -205,3 +205,37 @@ export type PetCommand = 'sit' | 'stand' | 'jump' | 'pet' | 'play' | 'float';
 
 /** Temporary animation state produced by a command. */
 export type PetAction = 'idle' | PetCommand;
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+/**
+ * Local, clearly fictional demo profile. Real (Auth0) accounts are a later
+ * phase and must never be merged with demo records automatically.
+ */
+export interface DemoProfile {
+  id: string;
+  displayName: string;
+  kind: 'demo';
+  petSpecies?: PetSpecies;
+  petName?: string;
+  createdAt: string;
+}
+
+/** Raw check-in from the form or the simulator, before validation. */
+export interface RawCheckInInput {
+  submittedAt: string | number;
+  sleepHours?: unknown;
+  sleepQuality?: unknown;
+  mood?: unknown;
+  stress?: unknown;
+  energy?: unknown;
+  symptoms?: unknown;
+  exerciseMinutes?: unknown;
+  notes?: unknown;
+  /** true only when produced by the simulator. */
+  synthetic: boolean;
+  scenarioId?: string;
+  missionDay?: number;
+}
