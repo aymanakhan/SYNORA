@@ -1,0 +1,9 @@
+{
+  "name": "SYNORA — astronaut wellness monitoring (educational prototype)",
+  "short_name": "SYNORA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0B1020",
+  "theme_color": "#111827",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
