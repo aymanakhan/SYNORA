@@ -19,6 +19,7 @@ export function PetPage() {
           <li><strong>Commands</strong> (sit, stand, jump, pet, play, float) are just for fun. They never change readings, alerts or mood.</li>
           <li>The axolotl drifts and wiggles its gills instead of sitting or standing; the action label says so.</li>
           <li><strong>Camera gestures</strong> (optional): open palm, pointing up or a fist. The camera is off until you enable it, and video never leaves this device. Buttons and keys 1–6 always work.</li>
+          <li><strong>Voice</strong> (optional): press <em>Push to talk</em> and say a command. It listens only after you press, for one phrase. Your browser's speech service may process the audio.</li>
         </ul>
         <div className="mt-4">
           <Button variant="secondary" onClick={() => setChanging(true)}>Change companion</Button>

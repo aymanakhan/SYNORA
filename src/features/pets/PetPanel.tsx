@@ -4,6 +4,7 @@ import { Button, StatusBadge } from '../../components/ui';
 import type { PetCommand } from '../health/types';
 import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, resolveCommand, type ResolvedAction } from './commands';
 import { GestureControl } from '../pet-input/GestureControl';
+import { VoiceControl } from '../pet-input/VoiceControl';
 import { PetSprite } from './PetSprite';
 import { playPetSound, useSoundPrefs } from './sound';
 import { SPECIES_LABEL } from './sprites';
@@ -113,6 +114,7 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
           </div>
           <p className="text-[11px] text-text-muted">Commands are just for fun. They never change your readings or status.</p>
           {withGestures && <GestureControl onCommand={(c) => dispatch(c)} />}
+          {withGestures && <VoiceControl onCommand={(c) => dispatch(c)} />}
         </>
       )}
     </div>

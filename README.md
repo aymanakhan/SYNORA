@@ -51,7 +51,8 @@ No accounts, API keys, or network access are needed for the demo.
 | Offline reload via service worker (production build; tested with network off) | ✅ |
 | Pet sounds (synthesized, off by default, volume) and Pixelify Sans pixel font (OFL) | ✅ |
 | Camera hand gestures (MediaPipe, in-browser, opt-in): ✋ stand · ☝ sit · ✊ jump | ✅ beta: see below |
-| Auth0, voice commands | not started |
+| Push-to-talk voice commands (Web Speech API, disclosed) | ✅ beta: needs a real mic test |
+| Auth0 accounts | not started (needs a tenant) |
 
 ## Camera gestures (optional)
 
