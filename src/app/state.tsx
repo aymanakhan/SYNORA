@@ -1,0 +1,332 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { assess } from '../features/health/assessment';
+import type {
+  AssessmentResult,
+  CheckIn,
+  DemoProfile,
+  Measurement,
+  PetSpecies,
+  RawCheckInInput,
+  RawMeasurementInput,
+} from '../features/health/types';
+import { MISSION_DAYS, generateDay, generateWindow, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
+import { ingestCheckIn, ingestMeasurement, type IngestCheckInResult, type IngestResult } from '../services/ingestion/ingest';
+import { IndexedDbRepository } from '../services/storage/indexedDb';
+import { MemoryRepository, type HealthRepository } from '../services/storage/repository';
+
+/** Which records are in view. Manual and synthetic data are never mixed in one assessment. */
+export type DataMode = 'manual' | 'simulated';
+
+export interface SimState {
+  scenarioId: ScenarioId;
+  day: number;
+  playing: boolean;
+  /** Real milliseconds per simulated mission day while playing. */
+  speedMs: number;
+}
+
+export interface LastUpdate {
+  at: number;
+  kind: 'measurement' | 'check-in' | 'simulated-day';
+  label: string;
+}
+
+interface SynoraContext {
+  ready: boolean;
+  storageWarning?: string;
+  profile?: DemoProfile;
+  mode: DataMode;
+  setMode: (m: DataMode) => void;
+  measurements: Measurement[];
+  checkIns: CheckIn[];
+  assessment?: AssessmentResult;
+  /** Real clock in manual mode; simulated mission clock in simulated mode. */
+  now: Date;
+  sim: SimState;
+  setScenario: (id: ScenarioId) => void;
+  setDay: (day: number) => void;
+  setPlaying: (playing: boolean) => void;
+  setSpeed: (ms: number) => void;
+  lastUpdate?: LastUpdate;
+  addManualMeasurement: (raw: Omit<RawMeasurementInput, 'source'>) => Promise<IngestResult>;
+  submitCheckIn: (raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay'>) => Promise<IngestCheckInResult>;
+  savePet: (species: PetSpecies, name: string) => Promise<void>;
+  resetData: (which: 'manual' | 'simulated') => Promise<void>;
+}
+
+const Ctx = createContext<SynoraContext | null>(null);
+
+const PROFILE_ID = 'demo-astronaut';
+const PREFS_KEY = 'synora.prefs.v1';
+
+interface Prefs {
+  mode: DataMode;
+  sim: Omit<SimState, 'playing'>;
+}
+
+const DEFAULT_PREFS: Prefs = { mode: 'simulated', sim: { scenarioId: 'stable', day: 30, speedMs: 1500 } };
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    const p = JSON.parse(raw) as Partial<Prefs>;
+    return {
+      mode: p.mode === 'manual' ? 'manual' : 'simulated',
+      sim: { ...DEFAULT_PREFS.sim, ...(p.sim ?? {}) },
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+function savePrefs(p: Prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    /* storage unavailable: preference simply isn't remembered */
+  }
+}
+
+export function SynoraProvider({ children }: { children: ReactNode }) {
+  const initial = useMemo(loadPrefs, []);
+  const [repo, setRepo] = useState<HealthRepository>();
+  const [storageWarning, setStorageWarning] = useState<string>();
+  const [profile, setProfile] = useState<DemoProfile>();
+  const [mode, setModeState] = useState<DataMode>(initial.mode);
+  const [sim, setSim] = useState<SimState>({ ...initial.sim, playing: false });
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [realNow, setRealNow] = useState(() => new Date());
+  const [lastUpdate, setLastUpdate] = useState<LastUpdate>();
+  const [ready, setReady] = useState(false);
+
+  // Serialize storage work so rapid slider moves can't interleave.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
+    const next = queue.current.then(fn, fn);
+    queue.current = next.catch(() => undefined);
+    return next;
+  }, []);
+  /** Day whose synthetic records are currently stored (undefined = none/unknown). */
+  const loadedSim = useRef<{ scenarioId: ScenarioId; day: number }>();
+
+  // --- open storage + profile ----------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let r: HealthRepository;
+      try {
+        r = await IndexedDbRepository.open();
+      } catch {
+        r = new MemoryRepository();
+        setStorageWarning('Browser storage is unavailable, so data will not be kept after reload.');
+      }
+      let p = await r.getProfile(PROFILE_ID);
+      if (!p) {
+        p = { id: PROFILE_ID, displayName: 'Demo Astronaut (fictional)', kind: 'demo', createdAt: new Date().toISOString() };
+        await r.saveProfile(p);
+      }
+      if (!cancelled) {
+        setRepo(r);
+        setProfile(p);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => savePrefs({ mode, sim: { scenarioId: sim.scenarioId, day: sim.day, speedMs: sim.speedMs } }), [mode, sim]);
+
+  // Real clock tick for freshness in manual mode.
+  useEffect(() => {
+    const t = setInterval(() => setRealNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const refresh = useCallback(
+    async (r: HealthRepository, m: DataMode) => {
+      const synthetic = m === 'simulated';
+      const [ms, cs] = await Promise.all([
+        r.listMeasurements(PROFILE_ID, { synthetic }),
+        r.listCheckIns(PROFILE_ID, { synthetic }),
+      ]);
+      setMeasurements(ms);
+      setCheckIns(cs);
+    },
+    [],
+  );
+
+  /** Run simulated readings for a day (or a window ending on it) through the normal ingestion path. */
+  const loadSimulation = useCallback(
+    (r: HealthRepository, scenarioId: ScenarioId, day: number) =>
+      enqueue(async () => {
+        const prev = loadedSim.current;
+        const appendOnly = prev && prev.scenarioId === scenarioId && day === prev.day + 1;
+        const days = appendOnly ? [generateDay(scenarioId, day)] : generateWindow(scenarioId, day);
+        if (!appendOnly) await r.clearRecords(PROFILE_ID, { synthetic: true });
+        const now = simulatedNow(day);
+        for (const d of days) {
+          for (const raw of d.measurements) await ingestMeasurement(raw, { profileId: PROFILE_ID, now }, r);
+          await ingestCheckIn(d.checkIn, { profileId: PROFILE_ID, now }, r);
+        }
+        loadedSim.current = { scenarioId, day };
+        setLastUpdate({ at: Date.now(), kind: 'simulated-day', label: `Mission day ${day} readings received` });
+      }),
+    [enqueue],
+  );
+
+  // Initial load once storage is open.
+  useEffect(() => {
+    if (!repo) return;
+    (async () => {
+      // Always rebuild the simulated window on startup so it matches the saved scenario/day.
+      await loadSimulation(repo, sim.scenarioId, sim.day);
+      await refresh(repo, mode);
+      setReady(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repo]);
+
+  const setMode = useCallback(
+    (m: DataMode) => {
+      setModeState(m);
+      if (repo) void enqueue(() => refresh(repo, m));
+    },
+    [repo, enqueue, refresh],
+  );
+
+  const applySim = useCallback(
+    async (scenarioId: ScenarioId, day: number) => {
+      if (!repo) return;
+      await loadSimulation(repo, scenarioId, day);
+      if (mode === 'simulated') await enqueue(() => refresh(repo, 'simulated'));
+    },
+    [repo, mode, loadSimulation, enqueue, refresh],
+  );
+
+  const setScenario = useCallback(
+    (id: ScenarioId) => {
+      setSim((s) => ({ ...s, scenarioId: id, playing: false }));
+      void applySim(id, sim.day);
+    },
+    [applySim, sim.day],
+  );
+
+  const setDay = useCallback(
+    (day: number) => {
+      const d = Math.min(MISSION_DAYS, Math.max(1, Math.round(day)));
+      setSim((s) => ({ ...s, day: d }));
+      void applySim(sim.scenarioId, d);
+    },
+    [applySim, sim.scenarioId],
+  );
+
+  const setPlaying = useCallback((playing: boolean) => setSim((s) => ({ ...s, playing })), []);
+  const setSpeed = useCallback((speedMs: number) => setSim((s) => ({ ...s, speedMs })), []);
+
+  // Simulated feed playback: one mission day per tick.
+  useEffect(() => {
+    if (!sim.playing) return;
+    if (sim.day >= MISSION_DAYS) {
+      setSim((s) => ({ ...s, playing: false }));
+      return;
+    }
+    const t = setTimeout(() => setDay(sim.day + 1), sim.speedMs);
+    return () => clearTimeout(t);
+  }, [sim.playing, sim.day, sim.speedMs, setDay]);
+
+  const now = mode === 'simulated' ? simulatedNow(sim.day) : realNow;
+
+  const assessment = useMemo(
+    () => (ready ? assess({ measurements, checkIns, now }) : undefined),
+    // `now` is derived from these; avoid re-running on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ready, measurements, checkIns, mode, sim.day, realNow],
+  );
+
+  const addManualMeasurement = useCallback(
+    async (raw: Omit<RawMeasurementInput, 'source'>) => {
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } as IngestResult;
+      const result = await enqueue(() => ingestMeasurement({ ...raw, source: 'manual' }, { profileId: PROFILE_ID }, repo));
+      if (result.status === 'saved') {
+        setLastUpdate({ at: Date.now(), kind: 'measurement', label: 'Manual measurement saved' });
+        setRealNow(new Date());
+        if (mode === 'manual') await enqueue(() => refresh(repo, 'manual'));
+      }
+      return result;
+    },
+    [repo, mode, enqueue, refresh],
+  );
+
+  const submitCheckIn = useCallback(
+    async (raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay'>) => {
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } as IngestCheckInResult;
+      const result = await enqueue(() => ingestCheckIn({ ...raw, synthetic: false }, { profileId: PROFILE_ID }, repo));
+      if (result.status === 'saved') {
+        setLastUpdate({ at: Date.now(), kind: 'check-in', label: 'Check-in saved' });
+        setRealNow(new Date());
+        if (mode === 'manual') await enqueue(() => refresh(repo, 'manual'));
+      }
+      return result;
+    },
+    [repo, mode, enqueue, refresh],
+  );
+
+  const savePet = useCallback(
+    async (species: PetSpecies, name: string) => {
+      if (!repo || !profile) return;
+      const p = { ...profile, petSpecies: species, petName: name.trim() || defaultPetName(species) };
+      await repo.saveProfile(p);
+      setProfile(p);
+    },
+    [repo, profile],
+  );
+
+  const resetData = useCallback(
+    async (which: 'manual' | 'simulated') => {
+      if (!repo) return;
+      await enqueue(() => repo.clearRecords(PROFILE_ID, { synthetic: which === 'simulated' }));
+      if (which === 'simulated') {
+        loadedSim.current = undefined;
+        await loadSimulation(repo, sim.scenarioId, sim.day);
+      }
+      await enqueue(() => refresh(repo, mode));
+    },
+    [repo, enqueue, loadSimulation, refresh, sim.scenarioId, sim.day, mode],
+  );
+
+  const value: SynoraContext = {
+    ready,
+    storageWarning,
+    profile,
+    mode,
+    setMode,
+    measurements,
+    checkIns,
+    assessment,
+    now,
+    sim,
+    setScenario,
+    setDay,
+    setPlaying,
+    setSpeed,
+    lastUpdate,
+    addManualMeasurement,
+    submitCheckIn,
+    savePet,
+    resetData,
+  };
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function defaultPetName(species: PetSpecies): string {
+  return { cat: 'Comet', dog: 'Rover', axolotl: 'Nova' }[species];
+}
+
+export function useSynora(): SynoraContext {
+  const c = useContext(Ctx);
+  if (!c) throw new Error('useSynora must be used inside <SynoraProvider>');
+  return c;
+}

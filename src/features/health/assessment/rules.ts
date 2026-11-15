@@ -110,6 +110,15 @@ export const RANGE_RULES: RangeRule[] = [
   },
 ];
 
+/** Status of a single value under a range rule (demonstration-only). */
+export function rangeStatus(rule: RangeRule, v: number): 'review' | 'attention' | undefined {
+  const hit = (b: Band) =>
+    (b.highAtOrAbove !== undefined && v >= b.highAtOrAbove) || (b.lowBelow !== undefined && v < b.lowBelow);
+  if (hit(rule.attention)) return 'attention';
+  if (hit(rule.review)) return 'review';
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Pattern rules (self-reports)
 // ---------------------------------------------------------------------------

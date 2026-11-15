@@ -20,7 +20,7 @@ import {
   RANGE_RULES,
   SLEEP_RULE,
   SUSTAINED_SELF_REPORT_RULE,
-  type RangeRule,
+  rangeStatus,
 } from './rules';
 
 export interface AssessmentInput {
@@ -84,7 +84,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
     usedRefs.add(m.id);
     const v = componentValue(m, rule.component);
     if (v === undefined) continue;
-    const status = bandStatus(rule, v);
+    const status = rangeStatus(rule, v);
     if (!status) continue;
     rangeFlagged.add(rule.metric);
     findings.push({
@@ -333,14 +333,6 @@ function evaluateSleep(sleep: Point[], nowMs: number): RuleFinding | undefined {
       nextStep: 'review-guidance',
     };
   }
-  return undefined;
-}
-
-function bandStatus(rule: RangeRule, v: number): 'review' | 'attention' | undefined {
-  const hit = (b: RangeRule['review']) =>
-    (b.highAtOrAbove !== undefined && v >= b.highAtOrAbove) || (b.lowBelow !== undefined && v < b.lowBelow);
-  if (hit(rule.attention)) return 'attention';
-  if (hit(rule.review)) return 'review';
   return undefined;
 }
 
