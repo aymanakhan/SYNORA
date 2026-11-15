@@ -4,6 +4,10 @@
 
 > SYNORA is **not** a medical device. It does not diagnose or prescribe treatment. All demo data is synthetic.
 
+## Live demo
+
+After merging to `main`, the app is published automatically to **https://aymanakhan.github.io/SYNORA/**. One-time setup: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
 ## Quick start
 
 Requires Node.js 20+.
