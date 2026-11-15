@@ -18,8 +18,8 @@
   --color-text-muted: #94a3b8;
 
   --font-sans: Inter, 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /* Placeholder until a licensed, self-hosted pixel font is added. Headings/branding only. */
-  --font-pixel: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* Pixelify Sans (SIL OFL 1.1, self-hosted via @fontsource). Branding, short headings, pet labels only. */
+  --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
 }
 
 html,

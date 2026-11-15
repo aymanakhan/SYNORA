@@ -4,6 +4,7 @@ import { Button, StatusBadge } from '../../components/ui';
 import type { PetCommand } from '../health/types';
 import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, resolveCommand, type ResolvedAction } from './commands';
 import { PetSprite } from './PetSprite';
+import { playPetSound, useSoundPrefs } from './sound';
 import { SPECIES_LABEL } from './sprites';
 import { PET_MESSAGES, derivePetWellness } from './wellness';
 
@@ -12,6 +13,7 @@ const WELLNESS_LABEL = { happy: 'Happy', tired: 'Tired', concerned: 'Concerned',
 /** Pet companion. Wellness comes from the shared assessment; commands are animation only. */
 export function PetPanel({ compact = false }: { compact?: boolean }) {
   const { profile, assessment } = useSynora();
+  const sound = useSoundPrefs();
   const [action, setAction] = useState<{ cmd: PetCommand; resolved: ResolvedAction }>();
   const lastAt = useRef<number>();
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -26,10 +28,11 @@ export function PetPanel({ compact = false }: { compact?: boolean }) {
       if (!acceptCommand(lastAt.current, now)) return;
       lastAt.current = now;
       setAction({ cmd, resolved: resolveCommand(species, cmd) });
+      if (sound.enabled) playPetSound(species, cmd, sound.volume);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setAction(undefined), ACTION_DURATION_MS);
     },
-    [species],
+    [species, sound.enabled, sound.volume],
   );
 
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -85,7 +88,29 @@ export function PetPanel({ compact = false }: { compact?: boolean }) {
           <p className="min-h-5 text-xs text-text-muted" aria-live="polite">
             {action ? `${name} ${action.resolved.verb}.` : 'Tap a command or press keys 1–6.'}
           </p>
-          <p className="text-[11px] text-text-muted">Commands are just for fun — they never change your readings or status.</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-text-muted">
+            <button
+              onClick={() => sound.setEnabled(!sound.enabled)}
+              aria-pressed={sound.enabled}
+              className="rounded border border-white/15 px-2 py-1 hover:border-white/30"
+            >
+              {sound.enabled ? '🔊 Sound on' : '🔇 Sound off'}
+            </button>
+            <label className="flex items-center gap-1">
+              Volume
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={sound.volume}
+                disabled={!sound.enabled}
+                onChange={(e) => sound.setVolume(Number(e.target.value))}
+                className="w-20 accent-cyan"
+              />
+            </label>
+          </div>
+          <p className="text-[11px] text-text-muted">Commands are just for fun. They never change your readings or status.</p>
         </>
       )}
     </div>
