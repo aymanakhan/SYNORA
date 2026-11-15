@@ -3,6 +3,7 @@ import { navigate } from '../../app/nav';
 import { useSynora } from '../../app/state';
 import { Button, Card } from '../../components/ui';
 import { RULE_DEFINITIONS } from '../health/assessment';
+import { SOURCES } from '../health/knowledge';
 
 export function SettingsPage() {
   const { resetData, storageWarning, profile } = useSynora();
@@ -52,6 +53,14 @@ export function SettingsPage() {
             {RULE_DEFINITIONS.map((r) => (
               <li key={r.id}>
                 <strong>{r.id}</strong>: {r.description}
+              </li>
+            ))}
+          </ul>
+          <p className="pt-2">Sources for the “why it matters in space” explanations (read by the team; they do not provide SYNORA’s thresholds):</p>
+          <ul className="list-disc space-y-1 pl-5 text-xs">
+            {Object.values(SOURCES).map((s) => (
+              <li key={s.id}>
+                <a className="text-cyan underline" href={s.url} target="_blank" rel="noreferrer">{s.title}</a> · {s.publisher}
               </li>
             ))}
           </ul>

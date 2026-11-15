@@ -43,7 +43,7 @@ No accounts, API keys, or network access are needed for the demo.
 | Pet companion: cat / dog / axolotl, 4 wellness states, 6 commands + keys | ✅ |
 | 180-day mission simulator, 5 scenarios, timeline preview | ✅ |
 | Daily check-in, trends charts, mission summary | ✅ |
-| Citations for rules (NASA/CSA sources) | ⏳ in progress |
+| "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline PWA build, Auth0, camera gestures, voice, sound | stretch |
 
 ## Architecture

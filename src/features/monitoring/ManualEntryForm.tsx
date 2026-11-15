@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useSynora } from '../../app/state';
+import { LearnMore } from '../../components/LearnMore';
 import { Button } from '../../components/ui';
 import { formatUnit, formatValue } from '../../lib/format';
 import { METRICS } from '../health/metrics';
@@ -109,6 +110,8 @@ export function ManualEntryForm() {
           {errFor('unit') && <span className="text-xs text-attention">{errFor('unit')}</span>}
         </div>
       </div>
+
+      <LearnMore metric={metric} summary={`How to measure ${def.label.toLowerCase()} · why it matters in space`} />
 
       {metric === 'bloodPressure' ? (
         <div className="grid grid-cols-2 gap-3">

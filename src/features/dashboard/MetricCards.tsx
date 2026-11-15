@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useSynora } from '../../app/state';
+import { LearnMore } from '../../components/LearnMore';
 import { Pill, SourceBadge } from '../../components/ui';
 import { formatUnit, formatValue, timeAgo } from '../../lib/format';
 import { statusStyle } from '../../theme/tokens';
@@ -132,6 +133,7 @@ export function MetricCards() {
                 <p className="mt-2 text-[11px] text-text-muted">No reading yet · {def.typicalMethod}</p>
               </>
             )}
+            <LearnMore metric={id} />
           </div>
         );
       })}

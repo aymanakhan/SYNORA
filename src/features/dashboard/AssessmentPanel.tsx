@@ -1,4 +1,5 @@
 import { useSynora } from '../../app/state';
+import { LearnMore } from '../../components/LearnMore';
 import { Card, Pill, StatusBadge } from '../../components/ui';
 import { NEXT_STEP_TEXT } from '../../lib/format';
 import { getRuleDefinition } from '../health/assessment';
@@ -34,6 +35,10 @@ export function AssessmentPanel() {
                 </div>
                 <p className="mt-1 text-sm text-text-secondary">{f.explanation}</p>
                 <p className="mt-1 text-xs text-text-muted">Next step: {NEXT_STEP_TEXT[f.nextStep]}</p>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  The threshold is illustrative. The spaceflight relevance below comes from NASA/CSA sources.
+                </p>
+                {f.ruleId === 'R-SYMPTOMS-REPORTED' ? <LearnMore symptoms /> : def?.metrics[0] && <LearnMore metric={def.metrics[0]} />}
               </li>
             );
           })}
