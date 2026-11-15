@@ -1,7 +1,7 @@
 /* SYNORA service worker: makes the built app reload offline.
  * Caches only the app shell and its static assets (never health data,
  * which lives in IndexedDB). Bump VERSION to invalidate old caches. */
-const VERSION = 'synora-v1';
+const VERSION = 'synora-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])));

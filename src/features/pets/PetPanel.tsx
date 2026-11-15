@@ -3,6 +3,7 @@ import { useSynora } from '../../app/state';
 import { Button, StatusBadge } from '../../components/ui';
 import type { PetCommand } from '../health/types';
 import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, resolveCommand, type ResolvedAction } from './commands';
+import { GestureControl } from '../pet-input/GestureControl';
 import { PetSprite } from './PetSprite';
 import { playPetSound, useSoundPrefs } from './sound';
 import { SPECIES_LABEL } from './sprites';
@@ -11,7 +12,7 @@ import { PET_MESSAGES, derivePetWellness } from './wellness';
 const WELLNESS_LABEL = { happy: 'Happy', tired: 'Tired', concerned: 'Concerned', unknown: 'Waiting for data' } as const;
 
 /** Pet companion. Wellness comes from the shared assessment; commands are animation only. */
-export function PetPanel({ compact = false }: { compact?: boolean }) {
+export function PetPanel({ compact = false, withGestures = false }: { compact?: boolean; withGestures?: boolean }) {
   const { profile, assessment } = useSynora();
   const sound = useSoundPrefs();
   const [action, setAction] = useState<{ cmd: PetCommand; resolved: ResolvedAction }>();
@@ -111,6 +112,7 @@ export function PetPanel({ compact = false }: { compact?: boolean }) {
             </label>
           </div>
           <p className="text-[11px] text-text-muted">Commands are just for fun. They never change your readings or status.</p>
+          {withGestures && <GestureControl onCommand={(c) => dispatch(c)} />}
         </>
       )}
     </div>

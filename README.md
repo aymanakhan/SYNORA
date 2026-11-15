@@ -49,7 +49,23 @@ No accounts, API keys, or network access are needed for the demo.
 | CI: tests + build on every pull request | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
-| Auth0, camera gestures, voice, sound | stretch |
+| Pet sounds (synthesized, off by default, volume) and Pixelify Sans pixel font (OFL) | ✅ |
+| Camera hand gestures (MediaPipe, in-browser, opt-in): ✋ stand · ☝ sit · ✊ jump | ✅ beta: see below |
+| Auth0, voice commands | not started |
+
+## Camera gestures (optional)
+
+On the **Pet** page, choose *Enable camera gestures*. Video is processed in the browser and is never recorded, stored or uploaded. Stopping it, or switching tabs, releases the camera. Buttons and keys 1–6 always work.
+
+The MediaPipe runtime is bundled with the app. The ~8 MB model is not committed yet. To make gestures work **offline**, run:
+
+```bash
+npm run fetch-gesture-model
+```
+
+Check the model card's licence before committing `public/models/gesture_recognizer.task`. Without the file, the app loads the model from Google's model storage (needs internet) and says so in the UI.
+
+**Tested:** permission denied, missing model, runtime served from our own origin, camera released after a failure, buttons unaffected (headless browser with a fake camera). **Not yet tested:** recognition with a real webcam and hand. Please try it on a laptop before the demo.
 
 ## Architecture
 
