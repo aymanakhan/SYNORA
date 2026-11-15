@@ -23,7 +23,7 @@ No accounts, API keys, or network access are needed for the demo.
 
 1. Open the app. **No login.** Choose a **cat, dog, or axolotl** and name it, then click *Start demo mission*.
 2. **Dashboard:** the simulated mission (stable scenario, day 30) shows **Stable**, and the pet is happy. Every value is labelled *SIMULATED · synthetic*.
-3. **Mission Simulator:** choose **Atypical vital sign**, then key day **D124 · Peak**. The result becomes **Attention**, with the rules that fired, the readings behind them, and a non-diagnostic next step. The pet becomes *concerned*. Try **D132 · After** to see it recover.
+3. **Mission Simulator:** choose **Atypical vital sign**, then key day **D124 · Peak**. The result becomes **Attention**, with the rules that fired, the readings behind them, and a non-diagnostic next step. The pet becomes *concerned*. On the dashboard's **Body overview**, click the highlighted heart and lungs. Try **D132 · After** to see it recover.
 4. **Live Monitoring:**
    - *Simulated Sensor Feed*: press **Start feed** to watch new mission days arrive.
    - *Connected Monitoring Device*: honestly says nothing is connected.
@@ -45,6 +45,8 @@ No accounts, API keys, or network access are needed for the demo.
 | Pet companion: cat / dog / axolotl, 4 wellness states, 6 commands + keys | ✅ |
 | 180-day mission simulator, 5 scenarios, timeline preview | ✅ |
 | Daily check-in, trends charts, mission summary | ✅ |
+| Clickable body overview (regions coloured by the shared assessment) | ✅ |
+| CI: tests + build on every pull request | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
 | Auth0, camera gestures, voice, sound | stretch |

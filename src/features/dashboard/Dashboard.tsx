@@ -2,6 +2,7 @@ import { navigate } from '../../app/nav';
 import { useSynora } from '../../app/state';
 import { Button, Card } from '../../components/ui';
 import { METRICS } from '../health/metrics';
+import { BodyMap } from '../body/BodyMap';
 import { PetPanel } from '../pets/PetPanel';
 import { AssessmentPanel } from './AssessmentPanel';
 import { DataContextBanner } from './DataContextBanner';
@@ -32,6 +33,7 @@ export function Dashboard() {
               )}
             </Card>
           )}
+          <BodyMap />
           <MetricCards />
         </div>
         <aside className="lg:sticky lg:top-4 lg:self-start">

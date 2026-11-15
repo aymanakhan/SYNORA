@@ -1,12 +1,11 @@
-import { useMemo } from 'react';
 import { useSynora } from '../../app/state';
 import { LearnMore } from '../../components/LearnMore';
 import { Pill, SourceBadge } from '../../components/ui';
-import { formatUnit, formatValue, timeAgo } from '../../lib/format';
+import { timeAgo } from '../../lib/format';
 import { statusStyle } from '../../theme/tokens';
-import { FRESHNESS_MS, getRuleDefinition } from '../health/assessment';
 import { METRICS } from '../health/metrics';
-import type { AssessmentStatus, Measurement, MetricId } from '../health/types';
+import type { MetricId } from '../health/types';
+import { useLatestReadings } from './useLatestReadings';
 
 const DASHBOARD_METRICS: MetricId[] = [
   'heartRate',
@@ -20,85 +19,17 @@ const DASHBOARD_METRICS: MetricId[] = [
   'radiationDose',
 ];
 
-const CHECKIN_FIELD: Partial<Record<MetricId, 'sleepHours' | 'stress' | 'mood'>> = {
-  sleepDuration: 'sleepHours',
-  stress: 'stress',
-  mood: 'mood',
-};
-
-interface Latest {
-  value: string;
-  unit: string;
-  at: string;
-  source: Measurement['source'];
-  ref: string;
-  suspect: boolean;
-  method?: string;
-  fromCheckIn: boolean;
-}
-
 export function MetricCards() {
-  const { measurements, checkIns, assessment, now } = useSynora();
+  const { now } = useSynora();
 
-  const latest = useMemo(() => {
-    const out = new Map<MetricId, Latest>();
-    for (const m of measurements) {
-      if (Date.parse(m.measuredAt) > now.getTime()) continue;
-      out.set(m.metric, {
-        value: formatValue(m),
-        unit: formatUnit(m),
-        at: m.measuredAt,
-        source: m.source,
-        ref: m.id,
-        suspect: m.qualityStatus === 'suspect',
-        method: m.deviceOrMethod,
-        fromCheckIn: false,
-      });
-    }
-    // Self-reports may also come from check-ins; use whichever is newer.
-    for (const c of checkIns) {
-      if (Date.parse(c.submittedAt) > now.getTime()) continue;
-      for (const [metric, field] of Object.entries(CHECKIN_FIELD) as [MetricId, 'sleepHours' | 'stress' | 'mood'][]) {
-        const v = c[field];
-        if (v === undefined) continue;
-        const prev = out.get(metric);
-        if (prev && prev.at >= c.submittedAt) continue;
-        out.set(metric, {
-          value: field === 'sleepHours' ? v.toFixed(1) : String(v),
-          unit: field === 'sleepHours' ? 'h' : '/ 5',
-          at: c.submittedAt,
-          source: c.isSynthetic ? 'simulated' : 'manual',
-          ref: c.id,
-          suspect: false,
-          method: 'Daily check-in',
-          fromCheckIn: true,
-        });
-      }
-    }
-    return out;
-  }, [measurements, checkIns, now]);
-
-  /**
-   * A card is highlighted only when a finding is about THAT metric. A check-in
-   * holds several values, so e.g. a symptoms finding must not flag its sleep value.
-   */
-  const flagFor = (metric: MetricId, l: Latest): AssessmentStatus | undefined => {
-    let worst: AssessmentStatus | undefined;
-    for (const f of assessment?.findings ?? []) {
-      if (!f.evidenceRefs.includes(l.ref)) continue;
-      const metrics = getRuleDefinition(f.ruleId)?.metrics ?? [];
-      const relevant = metrics.length > 0 ? metrics.includes(metric) : !l.fromCheckIn;
-      if (relevant && worst !== 'attention') worst = f.status;
-    }
-    return worst;
-  };
+  const { latest, flagFor, isStale } = useLatestReadings();
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {DASHBOARD_METRICS.map((id) => {
         const def = METRICS[id];
         const l = latest.get(id);
-        const stale = l ? now.getTime() - Date.parse(l.at) > FRESHNESS_MS[def.kind] : false;
+        const stale = l ? isStale(id, l) : false;
         const flag = l ? flagFor(id, l) : undefined;
         const accent = flag ? statusStyle[flag].color : undefined;
         return (
