@@ -33,9 +33,11 @@ No accounts, API keys, or network access are needed for the demo.
    - *Connected Monitoring Device*: honestly says nothing is connected.
    - *Manual Measurement*: enter a heart rate of `400` to see it rejected, then `72`, a blood pressure of `118/76` and a temperature of `98.4 °F` (converted to °C). The dashboard switches to your manual entries.
 5. **Check-In:** log `4` hours of sleep. The result becomes **Review** (short sleep) and the pet becomes concerned.
-6. **Pet:** try the command buttons or keys 1–6. The axolotl shows labelled equivalents (it floats rather than sits), and the status doesn't change.
-7. **Reload the page:** the pet, manual entries and check-ins are still there.
-8. **Trends** and **Summary:** charts with the demonstration thresholds and flagged points, plus a copyable, source-labelled summary.
+6. **Today's routine:** on the dashboard (manual entries), use **Measure now** on a reminder. Complete all six tasks and the pet earns a treat. Mistakes can be fixed with **Edit**/**Delete** in Live Monitoring → Manual and in Check-In history.
+7. **Solar particle event:** in Mission Simulator, choose that scenario and **D96 · Storm peak** for a radiation attention; **D175** shows the cumulative-dose review.
+8. **Pet:** try the command buttons or keys 1–6. The axolotl shows labelled equivalents (it floats rather than sits), and the status doesn't change.
+9. **Reload the page:** the pet, manual entries and check-ins are still there.
+10. **Trends** and **Summary:** charts with the demonstration thresholds and flagged points, plus a copyable, source-labelled summary.
 
 ## Status
 
@@ -50,6 +52,10 @@ No accounts, API keys, or network access are needed for the demo.
 | 180-day mission simulator, 5 scenarios, timeline preview | ✅ |
 | Daily check-in, trends charts, mission summary | ✅ |
 | Clickable body overview (regions coloured by the shared assessment) | ✅ |
+| Radiation dose-rate + cumulative mission dose rules; "Solar particle event" scenario | ✅ |
+| "What you can do now" guidance on every finding | ✅ |
+| Today's routine: reminders, "Measure now" links, pet stars/treats/streak | ✅ |
+| Edit/Delete manual readings and check-ins; one check-in per day | ✅ |
 | CI: tests + build on every pull request | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
@@ -62,13 +68,9 @@ No accounts, API keys, or network access are needed for the demo.
 
 On the **Pet** page, choose *Enable camera gestures*. Video is processed in the browser and is never recorded, stored or uploaded. Stopping it, or switching tabs, releases the camera. Buttons and keys 1–6 always work.
 
-The MediaPipe runtime is bundled with the app. The ~8 MB model is not committed yet. To make gestures work **offline**, run:
+The MediaPipe runtime is bundled with the app. The ~8 MB gesture model is **downloaded during the GitHub Pages build** (see `.github/workflows/deploy-pages.yml`) and served from the site itself. After the first online visit, the browser caches the runtime and model, so gestures also work **offline** at the venue. Please check the model card's licence before relying on it for the submission: https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer
 
-```bash
-npm run fetch-gesture-model
-```
-
-Check the model card's licence before committing `public/models/gesture_recognizer.task`. Without the file, the app loads the model from Google's model storage (needs internet) and says so in the UI.
+For local runs, `npm run fetch-gesture-model` does the same download. Without the file, the app falls back to Google's hosted copy (needs internet) and says so.
 
 **Tested:** permission denied, missing model, runtime served from our own origin, camera released after a failure, buttons unaffected (headless browser with a fake camera). **Not yet tested:** recognition with a real webcam and hand. Please try it on a laptop before the demo.
 

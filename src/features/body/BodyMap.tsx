@@ -17,7 +17,7 @@ type RegionStatus = AssessmentStatus | 'not-tracked';
  * flags as the metric cards. No region has its own medical logic.
  */
 export function BodyMap() {
-  const { now } = useSynora();
+  const { now, assessment } = useSynora();
   const { latest, flagFor, isStale } = useLatestReadings();
   const [selected, setSelected] = useState<RegionId>('heart');
 
@@ -134,6 +134,12 @@ export function BodyMap() {
             </ul>
           )}
 
+          {sel.id === 'radiation' && assessment?.radiation && (
+            <p className="mt-2 text-sm text-text-secondary">
+              Recorded total: <strong>{assessment.radiation.totalMSv.toFixed(1)} mSv</strong> from {assessment.radiation.readings} dosimeter readings
+              {assessment.radiation.latestDailyRateMSv !== undefined && <> · latest ≈ {assessment.radiation.latestDailyRateMSv.toFixed(2)} mSv/day</>}.
+            </p>
+          )}
           {sel.notTracked && <p className="mt-3 rounded border border-white/10 bg-panel p-2 text-xs text-text-secondary">{sel.notTracked}</p>}
           {sel.note && (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-text-secondary">

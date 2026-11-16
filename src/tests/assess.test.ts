@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assess } from '../features/health/assessment';
+import { GUIDANCE } from '../features/health/assessment/guidance';
 import { RULE_DEFINITIONS } from '../features/health/assessment/rules';
 import { METRICS } from '../features/health/metrics';
 import type { CheckIn, Measurement, MeasurementValue, MetricId } from '../features/health/types';
@@ -50,7 +51,8 @@ const normalVitals = () => [
   m('spo2', 98),
 ];
 
-const run = (measurements: Measurement[], checkIns: CheckIn[] = []) => assess({ measurements, checkIns, now: NOW });
+const run = (measurements: Measurement[], checkIns: CheckIn[] = []) =>
+  assess({ measurements, checkIns, now: NOW, utcOffsetMinutes: 0 });
 const ruleIds = (r: ReturnType<typeof run>) => r.findings.map((f) => f.ruleId);
 
 describe('data adequacy and unknown', () => {
@@ -327,5 +329,175 @@ describe('pet wellness derives only from the assessment result', () => {
 
   it('is concerned when symptoms are reported (supportive, not punitive)', () => {
     expect(derivePetWellness(run(normalVitals(), [checkIn(1, { symptoms: ['dizzy'] })]))).toBe('concerned');
+  });
+});
+
+describe('sleep / stress / mood count one entry per night (regression)', () => {
+  // NOW = 2026-11-15 12:00 UTC. Hours-ago values below land on these UTC days:
+  //   1–10 h ago → Nov 15 · 26–34 h ago → Nov 14 · 50 h → Nov 13 · 74 h → Nov 12
+  const sleepIds = (cs: CheckIn[]) => ruleIds(run(normalVitals(), cs)).filter((r) => r === 'R-SLEEP-SHORT');
+
+  it('three 5.5 h check-ins on the SAME day do not count as three nights', () => {
+    const r = run(normalVitals(), [
+      checkIn(3, { sleepHours: 5.5 }),
+      checkIn(2, { sleepHours: 5.5 }),
+      checkIn(1, { sleepHours: 5.5 }),
+    ]);
+    expect(ruleIds(r)).not.toContain('R-SLEEP-SHORT');
+    expect(r.status).toBe('stable');
+  });
+
+  it('uses the latest entry when a night has several', () => {
+    // Nov 13 and 14 short; Nov 15 first entered 5.5 h then corrected to 7.5 h.
+    expect(sleepIds([
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(26, { sleepHours: 5.5 }),
+      checkIn(3, { sleepHours: 5.5 }),
+      checkIn(1, { sleepHours: 7.5 }),
+    ])).toEqual([]);
+  });
+
+  it('a skipped night breaks the streak', () => {
+    // Nov 12, 13, 15 short — no entry for Nov 14.
+    expect(sleepIds([
+      checkIn(74, { sleepHours: 5.5 }),
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(2, { sleepHours: 5.5 }),
+    ])).toEqual([]);
+  });
+
+  it('three consecutive short nights trigger the multi-night review', () => {
+    const r = run(normalVitals(), [
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(26, { sleepHours: 5.8 }),
+      checkIn(2, { sleepHours: 5.2 }),
+    ]);
+    const f = r.findings.find((x) => x.ruleId === 'R-SLEEP-SHORT')!;
+    expect(f.status).toBe('review');
+    expect(f.evidence).toBe('demonstration-only');
+    expect(f.explanation).toMatch(/3 consecutive nights/);
+    expect(f.evidenceRefs).toHaveLength(3);
+  });
+
+  it('one entry below 5 h still triggers the single-night review', () => {
+    const r = run(normalVitals(), [checkIn(2, { sleepHours: 4.5 })]);
+    const f = r.findings.find((x) => x.ruleId === 'R-SLEEP-SHORT')!;
+    expect(f.explanation).toMatch(/under 5 h/);
+  });
+
+  it('three consecutive nights that ended more than a day ago do not count', () => {
+    // Nov 11, 12, 13 short, nothing since.
+    expect(sleepIds([
+      checkIn(98, { sleepHours: 5.5 }),
+      checkIn(74, { sleepHours: 5.5 }),
+      checkIn(50, { sleepHours: 5.5 }),
+    ])).toEqual([]);
+  });
+
+  it('applies the same per-day counting to stress and mood', () => {
+    const sameDay = run(normalVitals(), [
+      checkIn(3, { stress: 5, mood: 1 }),
+      checkIn(2, { stress: 5, mood: 1 }),
+      checkIn(1, { stress: 5, mood: 1 }),
+    ]);
+    expect(ruleIds(sameDay)).not.toContain('R-STRESS-SUSTAINED');
+    expect(ruleIds(sameDay)).not.toContain('R-MOOD-LOW');
+  });
+
+  it('respects the local day boundary via utcOffsetMinutes', () => {
+    // 23:00 and 01:00 UTC are different UTC days but the same day at UTC-5.
+    const at = (iso: string, h: number) => ({ ...checkIn(0, { sleepHours: h }), submittedAt: iso });
+    const cs = [at('2026-11-14T01:00:00Z', 5.5), at('2026-11-14T23:00:00Z', 5.5), at('2026-11-15T09:00:00Z', 5.5)];
+    const utc = assess({ measurements: normalVitals(), checkIns: cs, now: NOW, utcOffsetMinutes: 0 });
+    const est = assess({ measurements: normalVitals(), checkIns: cs, now: NOW, utcOffsetMinutes: -300 });
+    expect(utc.findings.map((f) => f.ruleId)).not.toContain('R-SLEEP-SHORT'); // Nov 14 counted once, Nov 13 missing
+    expect(est.findings.map((f) => f.ruleId)).toContain('R-SLEEP-SHORT'); // Nov 13, 14, 15 local
+  });
+});
+
+describe('radiation rules (demonstration-only)', () => {
+  const dose = (mSv: number, hoursAgo = 2, period?: number) =>
+    m('radiationDose', mSv, hoursAgo, period === undefined ? {} : { exposurePeriodHours: period });
+  const rad = (r: ReturnType<typeof run>) => r.findings.filter((f) => f.ruleId.startsWith('R-RAD'));
+
+  it('a normal daily dose is stable and reported in the summary', () => {
+    const r = run([...normalVitals(), dose(0.6, 2, 24)]);
+    expect(rad(r)).toEqual([]);
+    expect(r.status).toBe('stable');
+    expect(r.radiation).toMatchObject({ totalMSv: 0.6, readings: 1, latestDailyRateMSv: 0.6 });
+  });
+
+  it('flags a high dose rate (review) and a very high one (attention)', () => {
+    expect(rad(run([...normalVitals(), dose(3, 2, 24)]))[0]).toMatchObject({ ruleId: 'R-RAD-DOSE-RATE', status: 'review' });
+    expect(rad(run([...normalVitals(), dose(12, 2, 24)]))[0]).toMatchObject({ ruleId: 'R-RAD-DOSE-RATE', status: 'attention', nextStep: 'consult-flight-surgeon' });
+  });
+
+  it('normalises by the exposure period', () => {
+    // 6 mSv over 72 h = 2 mSv/day → review; 6 mSv over 12 h = 12 mSv/day → attention.
+    expect(rad(run([...normalVitals(), dose(6, 2, 72)]))[0].status).toBe('review');
+    expect(rad(run([...normalVitals(), dose(6, 2, 12)]))[0].status).toBe('attention');
+  });
+
+  it('treats a reading without a period as covering one day', () => {
+    expect(rad(run([...normalVitals(), dose(3, 2)]))[0].status).toBe('review');
+  });
+
+  it('a huge single entry is never "stable"', () => {
+    const r = run([...normalVitals(), dose(500, 2, 24)]);
+    expect(r.status).toBe('attention');
+    expect(rad(r).map((f) => f.ruleId).sort()).toEqual(['R-RAD-CUMULATIVE', 'R-RAD-DOSE-RATE']);
+  });
+
+  it('adds up the mission dose, including old readings', () => {
+    // 160 daily readings of 1 mSv (each one is a normal rate) → 160 mSv cumulative → review
+    const history = Array.from({ length: 160 }, (_, i) => dose(1, 24 * (i + 1), 24));
+    const r = run([...normalVitals(), ...history]);
+    expect(r.radiation?.totalMSv).toBe(160);
+    expect(rad(r)).toEqual([expect.objectContaining({ ruleId: 'R-RAD-CUMULATIVE', status: 'review' })]);
+  });
+
+  it('a stale high reading still counts toward the total but not the rate', () => {
+    const r = run([...normalVitals(), dose(12, 24 * 10, 24)]);
+    expect(rad(r)).toEqual([]);
+    expect(r.radiation?.totalMSv).toBe(12);
+    expect(r.radiation?.latestDailyRateMSv).toBeUndefined();
+  });
+});
+
+describe('practical guidance on findings', () => {
+  it('every finding carries guidance', () => {
+    const r = run(
+      [m('heartRate', 130), m('bloodPressure', { systolic: 170, diastolic: 105 }), m('spo2', 90), m('bodyTemperature', 39.5), m('bloodGlucose', 40), m('radiationDose', 12, 2, { exposurePeriodHours: 24 })],
+      [checkIn(1, { sleepHours: 3, symptoms: ['nausea'] })],
+    );
+    expect(r.findings.length).toBeGreaterThan(5);
+    for (const f of r.findings) expect(f.guidance?.length, f.ruleId).toBeGreaterThan(0);
+  });
+
+  it('guidance follows the direction of the reading', () => {
+    const high = run([m('heartRate', 125), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    const low = run([m('heartRate', 45), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    expect(high).toMatch(/caffeine|exercise/);
+    expect(low).toMatch(/fit people/);
+    const gHigh = run([m('bloodGlucose', 260), m('heartRate', 70), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    const gLow = run([m('bloodGlucose', 50), m('heartRate', 70), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    expect(gHigh).toMatch(/last ate/);
+    expect(gLow).toMatch(/shaky/);
+  });
+
+  it('never suggests a medication or dose', () => {
+    const all = Object.values(GUIDANCE).flatMap((g) => Object.values(g).flat()).join(' ').toLowerCase();
+    expect(all).not.toMatch(/\b(mg|tablet|pill|aspirin|ibuprofen|paracetamol|acetaminophen|insulin|dose of)\b/);
+  });
+});
+
+describe('stale readings explanation', () => {
+  it('explains that yesterday’s readings are too old', () => {
+    const r = run([m('heartRate', 70, 26), m('spo2', 98, 26), m('bodyTemperature', 36.7, 30)]);
+    expect(r.status).toBe('unknown');
+    expect(r.explanation).toMatch(/from 26 h ago.*current for 24 h/);
+  });
+  it('keeps the generic message when there are no readings at all', () => {
+    expect(run([]).explanation).toMatch(/Not enough current/);
   });
 });

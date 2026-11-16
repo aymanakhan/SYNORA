@@ -14,7 +14,7 @@ export const MISSION_START_MS = Date.UTC(2026, 0, 1);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
-export type ScenarioId = 'stable' | 'worsening-sleep' | 'elevated-stress' | 'atypical-vital' | 'recovery';
+export type ScenarioId = 'stable' | 'worsening-sleep' | 'elevated-stress' | 'atypical-vital' | 'recovery' | 'radiation-event';
 
 export interface Scenario {
   id: ScenarioId;
@@ -76,6 +76,17 @@ export const SCENARIOS: Scenario[] = [
       { day: 90, label: 'Recovered' },
     ],
   },
+  {
+    id: 'radiation-event',
+    name: 'Solar particle event',
+    description: 'A fictional solar storm on days 95–97 sharply raises the daily dosimeter reading, then the mission total keeps growing.',
+    keyDays: [
+      { day: 93, label: 'Before' },
+      { day: 96, label: 'Storm peak' },
+      { day: 100, label: 'After' },
+      { day: 175, label: 'Mission total' },
+    ],
+  },
 ];
 
 export function getScenario(id: string): Scenario | undefined {
@@ -133,10 +144,12 @@ interface Effects {
   mood: number;
   energy: number;
   symptoms: string[];
+  /** Extra radiation dose for the day, mSv. */
+  radiation: number;
 }
 
 function effects(id: ScenarioId, day: number): Effects {
-  const e: Effects = { hr: 0, sys: 0, dia: 0, temp: 0, spo2: 0, sleep: 0, sleepQuality: 0, stress: 0, mood: 0, energy: 0, symptoms: [] };
+  const e: Effects = { hr: 0, sys: 0, dia: 0, temp: 0, spo2: 0, sleep: 0, sleepQuality: 0, stress: 0, mood: 0, energy: 0, symptoms: [], radiation: 0 };
   switch (id) {
     case 'stable':
       break;
@@ -166,6 +179,12 @@ function effects(id: ScenarioId, day: number): Effects {
       e.spo2 = -6 * g;
       e.energy = -2 * g;
       if (g >= 0.5) e.symptoms = ['headache', 'fatigue'];
+      break;
+    }
+    case 'radiation-event': {
+      // Fictional storm profile (mSv added on top of the usual daily dose).
+      e.radiation = ({ 95: 14, 96: 27, 97: 7 } as Record<number, number>)[day] ?? 0;
+      if (day === 96) e.stress = 1.5; // crew sheltering; mild stress bump
       break;
     }
     case 'recovery': {
@@ -221,7 +240,7 @@ export function generateDay(id: ScenarioId, day: number): SimulatedDay {
       measuredAt: start + 6 * HOUR_MS, // dose for the preceding 24 h
       exposurePeriodHours: 24,
       deviceOrMethod: 'Simulated dosimeter',
-      value: round(0.6 + noise(k('rad'), 0.05), 3),
+      value: round(0.6 + e.radiation + noise(k('rad'), 0.05), 3),
     },
   ];
   if (day % 3 === 1) {
@@ -243,6 +262,20 @@ export function generateDay(id: ScenarioId, day: number): SimulatedDay {
   };
 
   return { day, measurements, checkIn };
+}
+
+/**
+ * Dosimeter readings for days [1 … beforeDay-1], so the cumulative mission
+ * dose covers the whole mission even though only a recent window of other
+ * readings is loaded.
+ */
+export function radiationHistory(id: ScenarioId, beforeDay: number): RawMeasurementInput[] {
+  const out: RawMeasurementInput[] = [];
+  for (let d = 1; d < beforeDay; d++) {
+    const r = generateDay(id, d).measurements.find((m) => m.metric === 'radiationDose');
+    if (r) out.push(r);
+  }
+  return out;
 }
 
 /** Days [max(1, endDay - windowDays + 1) … endDay], oldest first. */

@@ -27,6 +27,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Bundle the gesture model so camera gestures work offline on the site.
+      # If the download fails, the site still deploys and falls back to the hosted model.
+      - run: npm run fetch-gesture-model
+        continue-on-error: true
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

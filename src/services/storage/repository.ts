@@ -10,9 +10,18 @@ export interface HealthRepository {
   listProfiles(): Promise<DemoProfile[]>;
   saveProfile(profile: DemoProfile): Promise<void>;
 
+  /** Insert, or replace an existing record with the same id. */
   addMeasurement(m: Measurement): Promise<void>;
+  getMeasurement(id: string): Promise<Measurement | undefined>;
+  deleteMeasurement(id: string): Promise<void>;
   listMeasurements(profileId: string, opts?: { synthetic?: boolean }): Promise<Measurement[]>;
+  /** Indexed lookup used for duplicate detection (no full scan). */
+  findMeasurementsAt(profileId: string, metric: string, measuredAt: string): Promise<Measurement[]>;
+
+  /** Insert, or replace an existing record with the same id. */
   addCheckIn(c: CheckIn): Promise<void>;
+  getCheckIn(id: string): Promise<CheckIn | undefined>;
+  deleteCheckIn(id: string): Promise<void>;
   listCheckIns(profileId: string, opts?: { synthetic?: boolean }): Promise<CheckIn[]>;
 
   /** Delete records for a profile (all, or only synthetic/real ones). */
@@ -40,6 +49,18 @@ export class MemoryRepository implements HealthRepository {
   async addMeasurement(m: Measurement) {
     this.measurements.set(m.id, structuredClone(m));
   }
+  async getMeasurement(id: string) {
+    const m = this.measurements.get(id);
+    return m && structuredClone(m);
+  }
+  async deleteMeasurement(id: string) {
+    this.measurements.delete(id);
+  }
+  async findMeasurementsAt(profileId: string, metric: string, measuredAt: string) {
+    return [...this.measurements.values()].filter(
+      (m) => m.profileId === profileId && m.metric === metric && m.measuredAt === measuredAt,
+    );
+  }
   async listMeasurements(profileId: string, opts: { synthetic?: boolean } = {}) {
     return [...this.measurements.values()]
       .filter((m) => m.profileId === profileId)
@@ -48,6 +69,13 @@ export class MemoryRepository implements HealthRepository {
   }
   async addCheckIn(c: CheckIn) {
     this.checkIns.set(c.id, structuredClone(c));
+  }
+  async getCheckIn(id: string) {
+    const c = this.checkIns.get(id);
+    return c && structuredClone(c);
+  }
+  async deleteCheckIn(id: string) {
+    this.checkIns.delete(id);
   }
   async listCheckIns(profileId: string, opts: { synthetic?: boolean } = {}) {
     return [...this.checkIns.values()]

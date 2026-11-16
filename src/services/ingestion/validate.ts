@@ -6,7 +6,7 @@ import type {
   MeasurementValue,
   RawMeasurementInput,
 } from '../../features/health/types';
-import { canonicalizeUnitSpelling, toCanonical } from './units';
+import { canonicalizeUnitSpelling, rangeInUnit, toCanonical } from './units';
 
 export interface ValidationError {
   field: keyof RawMeasurementInput | 'profileId';
@@ -34,6 +34,8 @@ const MAX_TEXT_LENGTH = 500;
  * narrow systolic–diastolic gap often indicates a cuff/entry error.
  */
 const MIN_PLAUSIBLE_PULSE_PRESSURE = 15;
+/** Tolerance for unit-conversion rounding (e.g. 109.4 °F → 43.000000000000004 °C). */
+const EPS = 1e-9;
 
 function parseNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
@@ -155,10 +157,12 @@ export function validateMeasurement(
           original = { value: num, unit: canonicalizeUnitSpelling(input.unit)! };
         }
         const range = def.plausibleRange;
-        if (range && (conv.value < range.min || conv.value > range.max)) {
+        if (range && (conv.value < range.min - EPS || conv.value > range.max + EPS)) {
+          // Report the limits in the unit the user entered.
+          const shown = rangeInUnit(metric, input.unit)!;
           errors.push({
             field: 'value',
-            message: `${def.label} must be between ${range.min} and ${range.max} ${def.canonicalUnit}.`,
+            message: `${def.label} must be between ${shown.min} and ${shown.max} ${shown.unit}.`,
           });
         }
         if (def.integer && !Number.isInteger(conv.value)) {

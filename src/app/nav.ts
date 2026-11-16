@@ -14,12 +14,20 @@ export const SECTIONS = [
 export type SectionId = (typeof SECTIONS)[number]['id'];
 
 function fromHash(): SectionId {
-  const h = window.location.hash.replace('#/', '').replace('#', '');
+  const h = window.location.hash.replace('#/', '').replace('#', '').split('?')[0];
   return (SECTIONS.find((s) => s.id === h)?.id ?? 'dashboard') as SectionId;
 }
 
-export function navigate(id: SectionId) {
-  window.location.hash = `/${id}`;
+/** Navigate to a section, optionally with parameters (e.g. { metric: 'bloodPressure' }). */
+export function navigate(id: SectionId, params?: Record<string, string>) {
+  const q = params ? `?${new URLSearchParams(params)}` : '';
+  window.location.hash = `/${id}${q}`;
+}
+
+/** Read a parameter from the current hash, e.g. #/live?metric=spo2. */
+export function hashParam(name: string): string | undefined {
+  const q = window.location.hash.split('?')[1];
+  return q ? new URLSearchParams(q).get(name) ?? undefined : undefined;
 }
 
 export function useSection(): SectionId {

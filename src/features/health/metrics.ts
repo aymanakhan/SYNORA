@@ -50,7 +50,8 @@ export const METRICS: Record<MetricId, MetricDefinition> = {
     kind: 'physiological',
     canonicalUnit: '°C',
     acceptedUnits: ['°C', '°F'],
-    plausibleRange: { min: 30, max: 45 },
+    // 25–43 °C (= 77–109.4 °F): team-agreed manual-entry limits; values outside are rejected as likely typos.
+    plausibleRange: { min: 25, max: 43 },
     hazards: ['hostile-closed-environment'],
     typicalMethod: 'Thermometer',
   },
@@ -142,8 +143,8 @@ export const METRICS: Record<MetricId, MetricDefinition> = {
 
 /** Input-sanity limits for blood pressure (not clinical thresholds). */
 export const BLOOD_PRESSURE_PLAUSIBLE = {
-  systolic: { min: 50, max: 260 },
-  diastolic: { min: 30, max: 160 },
+  systolic: { min: 50, max: 300 },
+  diastolic: { min: 30, max: 200 },
 } as const;
 
 export function isMetricId(value: string): value is MetricId {

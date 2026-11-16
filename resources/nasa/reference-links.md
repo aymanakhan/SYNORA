@@ -18,5 +18,6 @@ Sources behind the metric explanations and alert rules. **Status** records wheth
 - The sources above explain **why** indicators matter. **None of them supplies numeric thresholds**, so every rule in `src/features/health/assessment/rules.ts` remains **demonstration-only**.
 - The "how to measure" tips in `src/features/health/knowledge.ts` are general good practice, labelled in the UI as *not mission procedure*.
 - Input plausibility limits in `src/features/health/metrics.ts` are typo guards, not clinical thresholds.
-- Simulator physiology and the illustrative radiation dose (~0.6 mSv/day) are hand-tuned for the demo and are not taken from these sources.
+- Simulator physiology, the illustrative radiation dose (~0.6 mSv/day) and the fictional solar particle event are hand-tuned for the demo and are not taken from these sources.
+- Radiation rules (dose rate ≥ 2 / ≥ 10 mSv/day; cumulative ≥ 150 / ≥ 300 mSv) are **illustrative, not NASA exposure limits**. Replace them only with values from a reviewed primary source.
 - Never present a dataset as an individual astronaut's real-time values.

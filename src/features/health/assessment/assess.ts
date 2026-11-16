@@ -10,6 +10,7 @@ import type {
   RuleFinding,
 } from '../types';
 import { componentValue, computeBaseline } from './baseline';
+import { guidanceFor, type Direction } from './guidance';
 import {
   BASELINE,
   CHECK_IN_FLAG_THRESHOLDS,
@@ -19,6 +20,7 @@ import {
   MIN_CORE_VITALS_FOR_ASSESSMENT,
   RANGE_RULES,
   SLEEP_RULE,
+  RADIATION_RULE,
   SUSTAINED_SELF_REPORT_RULE,
   rangeStatus,
 } from './rules';
@@ -29,6 +31,12 @@ export interface AssessmentInput {
   checkIns?: CheckIn[];
   /** Required so results are reproducible (simulator, tests). */
   now: Date;
+  /**
+   * Offset from UTC in minutes used to decide which calendar day (night) an
+   * entry belongs to. Defaults to the runtime's local offset. The simulator
+   * passes 0 because the mission clock is UTC.
+   */
+  utcOffsetMinutes?: number;
 }
 
 /**
@@ -41,6 +49,8 @@ export interface AssessmentInput {
 export function assess(input: AssessmentInput): AssessmentResult {
   const now = input.now;
   const nowMs = now.getTime();
+  const offsetMin = input.utcOffsetMinutes ?? -now.getTimezoneOffset();
+  const dayOf = (t: number) => Math.floor((t + offsetMin * 60_000) / DAY_MS);
 
   // Dedupe by id, ignore future-dated readings, sort by measurement time
   // (handles out-of-order arrival).
@@ -87,7 +97,10 @@ export function assess(input: AssessmentInput): AssessmentResult {
     const status = rangeStatus(rule, v);
     if (!status) continue;
     rangeFlagged.add(rule.metric);
+    const highs = [rule.review.highAtOrAbove, rule.attention.highAtOrAbove].filter((x): x is number => x !== undefined);
+    const direction: Direction = highs.length > 0 && v >= Math.min(...highs) ? 'high' : 'low';
     findings.push({
+      guidance: guidanceFor(rule.id, direction),
       ruleId: rule.id,
       status,
       explanation: `${rule.label} ${fmt(v)} ${rule.unit} is in the demonstration ${status} range.${
@@ -150,6 +163,53 @@ export function assess(input: AssessmentInput): AssessmentResult {
     limitations.push(`Personal baseline not yet established for: ${noBaseline.join(', ')}.`);
   }
 
+  // --- Radiation: dose rate and cumulative dose ------------------------------
+  const radReadings = (byMetric.get('radiationDose') ?? []).filter((m) => typeof m.value === 'number');
+  let radiation: AssessmentResult['radiation'];
+  if (radReadings.length > 0) {
+    const total = radReadings.reduce((sum, m) => sum + (m.value as number), 0);
+    const last = radReadings[radReadings.length - 1];
+    const lastFresh = latestFresh('radiationDose');
+    // A reading without a stated period is treated as covering ≤ 24 h (conservative).
+    const rate = lastFresh ? ((lastFresh.value as number) * 24) / Math.min(24, lastFresh.exposurePeriodHours ?? 24) : undefined;
+    radiation = {
+      totalMSv: total,
+      readings: radReadings.length,
+      latestDailyRateMSv: rate,
+      firstAt: radReadings[0].measuredAt,
+      lastAt: last.measuredAt,
+    };
+    if (lastFresh && rate !== undefined) {
+      const R = RADIATION_RULE.dailyRate;
+      const st = rate >= R.attentionAtOrAbove ? 'attention' : rate >= R.reviewAtOrAbove ? 'review' : undefined;
+      if (st) {
+        usedRefs.add(lastFresh.id);
+        findings.push({
+          ruleId: 'R-RAD-DOSE-RATE',
+          status: st,
+          explanation: `Latest dosimeter reading ${fmt3(lastFresh.value as number)} mSv${
+            lastFresh.exposurePeriodHours ? ` over ${fmt(lastFresh.exposurePeriodHours)} h` : ' (period not stated)'
+          } ≈ ${fmt3(rate)} mSv per day, in the demonstration ${st} range.`,
+          evidenceRefs: [lastFresh.id],
+          evidence: 'demonstration-only',
+          nextStep: st === 'attention' ? 'consult-flight-surgeon' : 'verify-measurement',
+        });
+      }
+    }
+    const C = RADIATION_RULE.cumulative;
+    const cst = total >= C.attentionAtOrAbove ? 'attention' : total >= C.reviewAtOrAbove ? 'review' : undefined;
+    if (cst) {
+      findings.push({
+        ruleId: 'R-RAD-CUMULATIVE',
+        status: cst,
+        explanation: `Recorded radiation dose adds up to ${fmt(total)} mSv across ${radReadings.length} readings, in the demonstration ${cst} range. Periods without a reading are not included.`,
+        evidenceRefs: [last.id],
+        evidence: 'demonstration-only',
+        nextStep: cst === 'attention' ? 'consult-flight-surgeon' : 'review-guidance',
+      });
+    }
+  }
+
   // --- Self-report patterns -------------------------------------------------
   const sleep = selfReportSeries('sleepDuration', byMetric, checkIns);
   const stress = selfReportSeries('stress', byMetric, checkIns);
@@ -157,27 +217,27 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const energy = selfReportSeries('energy', byMetric, checkIns);
   const sleepQuality = selfReportSeries('sleepQuality', byMetric, checkIns);
 
-  const sleepFinding = evaluateSleep(sleep, nowMs);
+  const sleepFinding = evaluateSleep(sleep, nowMs, dayOf);
   if (sleepFinding) findings.push(sleepFinding);
 
-  const stressRecent = lastNWithin(stress, SUSTAINED_SELF_REPORT_RULE.count, SUSTAINED_SELF_REPORT_RULE.windowMs, nowMs);
+  const stressRecent = lastConsecutiveDays(stress, SUSTAINED_SELF_REPORT_RULE.count, nowMs, dayOf);
   if (stressRecent && stressRecent.every((p) => p.value >= SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove)) {
     findings.push({
       ruleId: 'R-STRESS-SUSTAINED',
       status: 'review',
-      explanation: `Stress self-reported at ${stressRecent.map((p) => p.value).join(', ')}/5 in the last ${stressRecent.length} reports.`,
+      explanation: `Stress self-reported at ${stressRecent.map((p) => p.value).join(', ')}/5 on each of the last ${stressRecent.length} days.`,
       evidenceRefs: stressRecent.map((p) => p.ref),
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
     });
   }
 
-  const moodRecent = lastNWithin(mood, SUSTAINED_SELF_REPORT_RULE.count, SUSTAINED_SELF_REPORT_RULE.windowMs, nowMs);
+  const moodRecent = lastConsecutiveDays(mood, SUSTAINED_SELF_REPORT_RULE.count, nowMs, dayOf);
   if (moodRecent && moodRecent.every((p) => p.value <= SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow)) {
     findings.push({
       ruleId: 'R-MOOD-LOW',
       status: 'review',
-      explanation: `Mood self-reported at ${moodRecent.map((p) => p.value).join(', ')}/5 in the last ${moodRecent.length} reports.`,
+      explanation: `Mood self-reported at ${moodRecent.map((p) => p.value).join(', ')}/5 on each of the last ${moodRecent.length} days.`,
       evidenceRefs: moodRecent.map((p) => p.ref),
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
@@ -243,6 +303,17 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const confidence: AssessmentResult['confidence'] =
     !adequate ? 'low' : freshCore.length >= CORE_VITALS.length && !anySuspect ? 'high' : 'moderate';
 
+  // Explain "unknown" caused by old readings (e.g. entered the night before a demo).
+  let staleNote: string | undefined;
+  const newestCore = CORE_VITALS.map((m) => byMetric.get(m)?.at(-1)).filter((m): m is Measurement => !!m);
+  if (!adequate && newestCore.length > 0) {
+    const newest = Math.max(...newestCore.map((m) => Date.parse(m.measuredAt)));
+    const hours = Math.round((nowMs - newest) / 3_600_000);
+    if (hours * 3_600_000 > FRESHNESS_MS.physiological) {
+      staleNote = `Your latest core readings are from ${hours} h ago, and readings count as current for ${FRESHNESS_MS.physiological / 3_600_000} h. Take today's measurements to get a current result.`;
+    }
+  }
+
   if (!adequate) {
     limitations.push(
       `Only ${freshCore.length} of ${CORE_VITALS.length} core vitals have a current reading; at least ${MIN_CORE_VITALS_FOR_ASSESSMENT} are needed for a stable result.`,
@@ -255,17 +326,21 @@ export function assess(input: AssessmentInput): AssessmentResult {
     (checkInFresh?.isSynthetic ?? false);
   if (basedOnSyntheticData) limitations.push('Includes synthetic (simulated) data — not real astronaut measurements.');
 
+  // Attach practical guidance to every finding that doesn't have it yet.
+  for (const f of findings) f.guidance ??= guidanceFor(f.ruleId);
+
   return {
     status,
     assessedAt: now.toISOString(),
     findings,
-    explanation: summarize(status, findings, freshCore.length),
+    explanation: summarize(status, findings, freshCore.length, staleNote),
     confidence,
     limitations,
     missingData,
     nextStep: pickNextStep(status, findings),
     basedOnSyntheticData,
     checkInFlags,
+    ...(radiation ? { radiation } : {}),
   };
 }
 
@@ -273,7 +348,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-interface Point {
+export interface Point {
   value: number;
   at: number;
   ref: string;
@@ -301,21 +376,45 @@ function selfReportSeries(metric: SelfMetric, byMetric: Map<MetricId, Measuremen
   return points.sort((a, b) => a.at - b.at);
 }
 
-function lastNWithin(series: Point[], n: number, windowMs: number, nowMs: number): Point[] | undefined {
-  if (series.length < n) return undefined;
-  const lastN = series.slice(-n);
-  return lastN.every((p) => nowMs - p.at <= windowMs) ? lastN : undefined;
+const DAY_MS = 24 * 60 * 60 * 1000;
+type DayOf = (t: number) => number;
+
+/**
+ * One point per calendar day: when several entries share a day (e.g. the
+ * same check-in submitted three times), only the latest counts. Oldest first.
+ */
+export function onePerDay(series: Point[], dayOf: DayOf): (Point & { day: number })[] {
+  const byDay = new Map<number, Point>();
+  for (const p of series) {
+    const d = dayOf(p.at);
+    const prev = byDay.get(d);
+    if (!prev || p.at >= prev.at) byDay.set(d, p);
+  }
+  return [...byDay.entries()].sort((a, b) => a[0] - b[0]).map(([day, p]) => ({ ...p, day }));
 }
 
-function evaluateSleep(sleep: Point[], nowMs: number): RuleFinding | undefined {
+/**
+ * The last `n` days, if they are n CONSECUTIVE calendar days ending today or
+ * yesterday. A skipped day breaks the streak.
+ */
+function lastConsecutiveDays(series: Point[], n: number, nowMs: number, dayOf: DayOf): Point[] | undefined {
+  const days = onePerDay(series, dayOf);
+  if (days.length < n) return undefined;
+  const lastN = days.slice(-n);
+  if (dayOf(nowMs) - lastN[n - 1].day > 1) return undefined; // not recent
+  for (let i = 1; i < n; i++) if (lastN[i].day !== lastN[i - 1].day + 1) return undefined;
+  return lastN;
+}
+
+function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf): RuleFinding | undefined {
   const latest = sleep[sleep.length - 1];
   if (!latest || nowMs - latest.at > FRESHNESS_MS.selfReport) return undefined;
-  const recent = lastNWithin(sleep, SLEEP_RULE.consecutiveNights, SLEEP_RULE.windowMs, nowMs);
+  const recent = lastConsecutiveDays(sleep, SLEEP_RULE.consecutiveNights, nowMs, dayOf);
   if (recent && recent.every((p) => p.value < SLEEP_RULE.consecutiveBelowHours)) {
     return {
       ruleId: 'R-SLEEP-SHORT',
       status: 'review',
-      explanation: `Sleep under ${SLEEP_RULE.consecutiveBelowHours} h for the last ${recent.length} nights (${recent
+      explanation: `Sleep under ${SLEEP_RULE.consecutiveBelowHours} h on each of the last ${recent.length} consecutive nights (${recent
         .map((p) => fmt(p.value))
         .join(', ')} h).`,
       evidenceRefs: recent.map((p) => p.ref),
@@ -352,10 +451,10 @@ function pickNextStep(status: AssessmentStatus, findings: RuleFinding[]): NextSt
   );
 }
 
-function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore: number): string {
+function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore: number, staleNote?: string): string {
   switch (status) {
     case 'unknown':
-      return 'Not enough current, reliable readings to assess. Record more measurements.';
+      return staleNote ?? 'Not enough current, reliable readings to assess. Record more measurements.';
     case 'stable':
       return `No demonstration rule was triggered across ${freshCore} current core vitals. This is not proof of good health.`;
     default:
@@ -363,6 +462,10 @@ function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore:
         status === 'attention' ? 'human medical review' : 'review'
       }. This is a monitoring flag, not a diagnosis.`;
   }
+}
+
+function fmt3(n: number): string {
+  return Number(n.toFixed(3)).toString();
 }
 
 function fmt(n: number): string {

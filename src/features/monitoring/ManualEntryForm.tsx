@@ -3,8 +3,9 @@ import { useSynora } from '../../app/state';
 import { LearnMore } from '../../components/LearnMore';
 import { Button } from '../../components/ui';
 import { formatUnit, formatValue } from '../../lib/format';
-import { METRICS } from '../health/metrics';
-import type { MetricId } from '../health/types';
+import { BLOOD_PRESSURE_PLAUSIBLE, METRICS } from '../health/metrics';
+import { rangeInUnit } from '../../services/ingestion/units';
+import type { Measurement, MetricId } from '../health/types';
 import type { ValidationError } from '../../services/ingestion/validate';
 
 const ENTRY_METRICS: MetricId[] = [
@@ -21,29 +22,39 @@ const ENTRY_METRICS: MetricId[] = [
 ];
 
 /** Local "YYYY-MM-DDTHH:mm" for <input type="datetime-local">. */
-function localNowInput(): string {
-  const d = new Date();
-  d.setSeconds(0, 0);
+function toLocalInput(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 const inputCls =
   'w-full rounded border border-white/15 bg-panel px-3 py-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-cyan';
 
-export function ManualEntryForm() {
-  const { addManualMeasurement } = useSynora();
+/**
+ * Manual measurement form. With `editing`, it corrects that saved entry
+ * (same id, same measurement type) instead of adding a new one.
+ */
+export function ManualEntryForm({
+  editing,
+  initialMetric,
+  onDone,
+}: { editing?: Measurement; initialMetric?: MetricId; onDone?: () => void } = {}) {
+  const { addManualMeasurement, editManualMeasurement } = useSynora();
   const uid = useId();
   const fid = (k: string) => `${uid}-${k}`;
-  const [metric, setMetric] = useState<MetricId>('heartRate');
+  const orig = editing?.original;
+  const shown = orig ?? (editing ? { value: editing.value, unit: editing.unit } : undefined);
+  const [metric, setMetric] = useState<MetricId>(editing?.metric ?? initialMetric ?? 'heartRate');
   const def = METRICS[metric];
-  const [unit, setUnit] = useState(def.canonicalUnit);
-  const [value, setValue] = useState('');
-  const [systolic, setSystolic] = useState('');
-  const [diastolic, setDiastolic] = useState('');
-  const [measuredAt, setMeasuredAt] = useState(localNowInput);
-  const [method, setMethod] = useState(def.typicalMethod);
-  const [notes, setNotes] = useState('');
-  const [period, setPeriod] = useState('24');
+  const [unit, setUnit] = useState(shown?.unit ?? def.canonicalUnit);
+  const [value, setValue] = useState(shown && typeof shown.value === 'number' ? String(shown.value) : '');
+  const [systolic, setSystolic] = useState(shown && typeof shown.value === 'object' ? String(shown.value.systolic) : '');
+  const [diastolic, setDiastolic] = useState(shown && typeof shown.value === 'object' ? String(shown.value.diastolic) : '');
+  // New entries default to "now" at the moment of saving, so the time never goes stale.
+  const [useNow, setUseNow] = useState(!editing);
+  const [measuredAt, setMeasuredAt] = useState(() => toLocalInput(editing ? new Date(editing.measuredAt) : new Date()));
+  const [method, setMethod] = useState(editing ? editing.deviceOrMethod ?? '' : def.typicalMethod);
+  const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [period, setPeriod] = useState(editing?.exposurePeriodHours?.toString() ?? '24');
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -64,15 +75,16 @@ export function ManualEntryForm() {
     e.preventDefault();
     setBusy(true);
     setSaved(undefined);
-    const result = await addManualMeasurement({
+    const raw = {
       metric,
       unit,
       value: metric === 'bloodPressure' ? { systolic, diastolic } : value,
-      measuredAt: measuredAt ? new Date(measuredAt).toISOString() : '',
+      measuredAt: useNow ? new Date().toISOString() : measuredAt ? new Date(measuredAt).toISOString() : '',
       deviceOrMethod: method.trim() || undefined,
       notes: notes.trim() || undefined,
       exposurePeriodHours: metric === 'radiationDose' && period ? Number(period) : undefined,
-    });
+    };
+    const result = editing ? await editManualMeasurement(editing.id, raw) : await addManualMeasurement(raw);
     setBusy(false);
     if (result.status === 'rejected') {
       setErrors(result.errors);
@@ -80,9 +92,13 @@ export function ManualEntryForm() {
     }
     setErrors([]);
     const m = result.status === 'saved' ? result.measurement : result.existing;
+    if (editing && result.status === 'saved') {
+      onDone?.();
+      return;
+    }
     setSaved(
       result.status === 'duplicate'
-        ? 'This exact reading was already saved, so it was not added twice.'
+        ? 'An identical reading with the same time is already saved, so it was not added twice.'
         : `Saved ${def.label}: ${formatValue(m)} ${formatUnit(m)} (manual entry). The monitoring result has been updated.`,
     );
     setValue('');
@@ -96,7 +112,7 @@ export function ManualEntryForm() {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="block text-sm">
           <label htmlFor={fid('metric')} className="text-text-secondary">Measurement</label>
-          <select id={fid('metric')} className={inputCls} value={metric} onChange={(e) => changeMetric(e.target.value as MetricId)}>
+          <select id={fid('metric')} className={inputCls} value={metric} disabled={!!editing} onChange={(e) => changeMetric(e.target.value as MetricId)}>
             {ENTRY_METRICS.map((m) => (
               <option key={m} value={m}>{METRICS[m].label}</option>
             ))}
@@ -142,14 +158,40 @@ export function ManualEntryForm() {
           <input className={inputCls} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} required />
         </label>
       )}
+      <p className="text-[11px] text-text-muted">
+        {metric === 'bloodPressure'
+          ? `Accepted: systolic ${BLOOD_PRESSURE_PLAUSIBLE.systolic.min}–${BLOOD_PRESSURE_PLAUSIBLE.systolic.max}, diastolic ${BLOOD_PRESSURE_PLAUSIBLE.diastolic.min}–${BLOOD_PRESSURE_PLAUSIBLE.diastolic.max} mmHg (input check, not a health range).`
+          : (() => {
+              const r = rangeInUnit(metric, unit);
+              return r ? `Accepted: ${r.min}–${r.max} ${r.unit.replace('scale 1–5', '')} (input check, not a health range).` : null;
+            })()}
+      </p>
       {errFor('value') && <p className="text-xs text-attention" role="alert">{errFor('value')}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="text-text-secondary">Measured at</span>
-          <input type="datetime-local" className={inputCls} value={measuredAt} onChange={(e) => setMeasuredAt(e.target.value)} />
+        <div className="block text-sm">
+          <label htmlFor={fid('time')} className="text-text-secondary">Measured at</label>
+          <input
+            id={fid('time')}
+            type="datetime-local"
+            className={`${inputCls} disabled:opacity-50`}
+            value={measuredAt}
+            disabled={useNow}
+            onChange={(e) => setMeasuredAt(e.target.value)}
+          />
+          <label className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
+            <input
+              type="checkbox"
+              checked={useNow}
+              onChange={(e) => {
+                setUseNow(e.target.checked);
+                if (!e.target.checked) setMeasuredAt(toLocalInput(new Date()));
+              }}
+            />
+            Use the current time when I save
+          </label>
           {errFor('measuredAt') && <span className="text-xs text-attention">{errFor('measuredAt')}</span>}
-        </label>
+        </div>
         <label className="block text-sm">
           <span className="text-text-secondary">Instrument / method</span>
           <input className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)} maxLength={500} />
@@ -168,8 +210,12 @@ export function ManualEntryForm() {
       </label>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={busy}>Save measurement</Button>
-        <span className="text-xs text-text-muted">Saved as a manual entry with your time stamp and method.</span>
+        <Button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Save measurement'}</Button>
+        {editing ? (
+          <Button variant="secondary" onClick={onDone}>Cancel</Button>
+        ) : (
+          <span className="text-xs text-text-muted">Saved as a manual entry with your time stamp and method.</span>
+        )}
       </div>
       <p aria-live="polite" className="text-sm text-stable">{saved}</p>
     </form>

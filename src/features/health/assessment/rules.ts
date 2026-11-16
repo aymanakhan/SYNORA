@@ -126,16 +126,14 @@ export function rangeStatus(rule: RangeRule, v: number): 'review' | 'attention' 
 export const SLEEP_RULE = {
   /** A single night below this triggers review. */
   singleNightBelowHours: 5,
-  /** This many consecutive recent nights below `consecutiveBelowHours`… */
+  /** This many CONSECUTIVE nights (one entry per night, latest wins) below `consecutiveBelowHours`. */
   consecutiveNights: 3,
   consecutiveBelowHours: 6,
-  /** …all within this window. */
-  windowMs: 96 * HOUR,
 } as const;
 
+/** Counted as consecutive calendar days, one entry per day (latest wins). */
 export const SUSTAINED_SELF_REPORT_RULE = {
   count: 3,
-  windowMs: 96 * HOUR,
   stressAtOrAbove: 4,
   moodAtOrBelow: 2,
 } as const;
@@ -147,6 +145,21 @@ export const CHECK_IN_FLAG_THRESHOLDS = {
   lowEnergyAtOrBelow: 2,
   highStressAtOrAbove: 4,
   lowMoodAtOrBelow: 2,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Radiation (demonstration-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Illustrative radiation thresholds for the demo. They are NOT NASA
+ * exposure limits; SYNORA has not reviewed a source that sets them.
+ */
+export const RADIATION_RULE = {
+  /** Latest reading, normalised to mSv per 24 h. */
+  dailyRate: { reviewAtOrAbove: 2, attentionAtOrAbove: 10 },
+  /** Sum of all recorded doses, mSv. */
+  cumulative: { reviewAtOrAbove: 150, attentionAtOrAbove: 300 },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -204,12 +217,28 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     description: describeBand(r),
   })),
   {
+    id: 'R-RAD-DOSE-RATE',
+    title: 'High radiation dose rate',
+    metrics: ['radiationDose'],
+    hazards: ['radiation'],
+    evidence: 'demonstration-only',
+    description: `Latest dosimeter reading normalised to 24 h: review at ≥ ${RADIATION_RULE.dailyRate.reviewAtOrAbove} mSv/day, attention at ≥ ${RADIATION_RULE.dailyRate.attentionAtOrAbove} mSv/day. Illustrative values, not NASA limits.`,
+  },
+  {
+    id: 'R-RAD-CUMULATIVE',
+    title: 'Cumulative mission radiation dose',
+    metrics: ['radiationDose'],
+    hazards: ['radiation'],
+    evidence: 'demonstration-only',
+    description: `Sum of all recorded doses: review at ≥ ${RADIATION_RULE.cumulative.reviewAtOrAbove} mSv, attention at ≥ ${RADIATION_RULE.cumulative.attentionAtOrAbove} mSv. Unrecorded periods are not filled in. Illustrative values, not NASA limits.`,
+  },
+  {
     id: 'R-SLEEP-SHORT',
     title: 'Short sleep',
     metrics: ['sleepDuration'],
     hazards: ['isolation-confinement', 'hostile-closed-environment'],
     evidence: 'demonstration-only',
-    description: `Review if the latest night is under ${SLEEP_RULE.singleNightBelowHours} h, or the last ${SLEEP_RULE.consecutiveNights} nights are all under ${SLEEP_RULE.consecutiveBelowHours} h.`,
+    description: `Review if the latest night is under ${SLEEP_RULE.singleNightBelowHours} h, or each of the last ${SLEEP_RULE.consecutiveNights} consecutive nights is under ${SLEEP_RULE.consecutiveBelowHours} h (one entry per night; a skipped night breaks the streak). Demonstration-only thresholds.`,
   },
   {
     id: 'R-STRESS-SUSTAINED',
@@ -217,7 +246,7 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     metrics: ['stress'],
     hazards: ['isolation-confinement', 'distance-from-earth'],
     evidence: 'demonstration-only',
-    description: `Review if the last ${SUSTAINED_SELF_REPORT_RULE.count} stress self-reports are all ≥ ${SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove}/5.`,
+    description: `Review if stress is ≥ ${SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove}/5 on each of the last ${SUSTAINED_SELF_REPORT_RULE.count} consecutive days (one entry per day). Demonstration-only threshold.`,
   },
   {
     id: 'R-MOOD-LOW',
@@ -225,7 +254,7 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     metrics: ['mood'],
     hazards: ['isolation-confinement', 'distance-from-earth'],
     evidence: 'demonstration-only',
-    description: `Review if the last ${SUSTAINED_SELF_REPORT_RULE.count} mood self-reports are all ≤ ${SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow}/5.`,
+    description: `Review if mood is ≤ ${SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow}/5 on each of the last ${SUSTAINED_SELF_REPORT_RULE.count} consecutive days (one entry per day). Demonstration-only threshold.`,
   },
   {
     id: 'R-SYMPTOMS-REPORTED',

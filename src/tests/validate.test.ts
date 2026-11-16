@@ -184,3 +184,41 @@ describe('validateMeasurement — data-quality flags', () => {
     expect(m.qualityStatus).toBe('suspect');
   });
 });
+
+describe('manual-entry limits (team-agreed)', () => {
+  const temp = (value: number, unit: string) => validateMeasurement(input({ metric: 'bodyTemperature', value, unit }), ctx);
+  const bp = (systolic: number, diastolic: number) =>
+    validateMeasurement(input({ metric: 'bloodPressure', value: { systolic, diastolic }, unit: 'mmHg' }), ctx);
+
+  it.each([
+    [25, '°C', true],
+    [24.9, '°C', false],
+    [43, '°C', true],
+    [43.1, '°C', false],
+    [77, '°F', true],
+    [76.9, '°F', false],
+    [109.4, '°F', true],
+    [109.5, '°F', false],
+  ])('temperature %s %s accepted=%s', (v, u, ok) => expect(temp(v, u).ok).toBe(ok));
+
+  it('reports temperature limits in the unit the user entered', () => {
+    const f = temp(110, '°F');
+    expect(!f.ok && f.errors[0].message).toBe('Body temperature must be between 77 and 109.4 °F.');
+    const c = temp(44, '°C');
+    expect(!c.ok && c.errors[0].message).toBe('Body temperature must be between 25 and 43 °C.');
+  });
+
+  it('reports other converted limits in the entered unit', () => {
+    const g = validateMeasurement(input({ metric: 'bloodGlucose', value: 40, unit: 'mmol/L' }), ctx);
+    expect(!g.ok && g.errors[0].message).toMatch(/mmol\/L\.$/);
+  });
+
+  it.each([
+    [50, 30, true],
+    [300, 200, true],
+    [49, 30, false],
+    [301, 120, false],
+    [120, 29, false],
+    [250, 201, false],
+  ])('blood pressure %s/%s accepted=%s', (s, d, ok) => expect(bp(s, d).ok).toBe(ok));
+});

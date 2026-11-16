@@ -84,6 +84,8 @@ export interface Measurement {
   missionDay?: number;
   /** Radiation: exposure period the dose covers, in hours. */
   exposurePeriodHours?: number;
+  /** Set when a manual entry was corrected after saving (ISO 8601). */
+  editedAt?: string;
 }
 
 /** Un-validated input from any source adapter (form, simulator, future device). */
@@ -123,6 +125,8 @@ export interface CheckIn {
   isSynthetic: boolean;
   scenarioId?: string;
   missionDay?: number;
+  /** Set when the check-in was corrected after saving (ISO 8601). */
+  editedAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +166,8 @@ export interface RuleFinding {
   evidenceRefs: string[];
   evidence: EvidenceLevel;
   nextStep: NextStepCategory;
+  /** Simple practical actions (general wellness/measurement steps, not treatment). */
+  guidance?: string[];
 }
 
 /** Wellbeing signals from recent self-reports/check-ins (not clinical findings). */
@@ -189,6 +195,18 @@ export interface AssessmentResult {
   basedOnSyntheticData: boolean;
   /** Recent self-report signals; used by the pet's `tired` state. */
   checkInFlags: CheckInFlag[];
+  /** Radiation dose recorded so far (sum of dosimeter readings in the input). */
+  radiation?: RadiationSummary;
+}
+
+export interface RadiationSummary {
+  /** Sum of all recorded doses, mSv. Gaps are not filled in. */
+  totalMSv: number;
+  readings: number;
+  /** Latest reading normalised to a 24 h rate, mSv/day (if it has a period). */
+  latestDailyRateMSv?: number;
+  firstAt?: string;
+  lastAt?: string;
 }
 
 // ---------------------------------------------------------------------------

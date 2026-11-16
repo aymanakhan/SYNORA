@@ -34,6 +34,15 @@ export function AssessmentPanel() {
                   <span className="text-[11px] text-text-muted">{f.ruleId}</span>
                 </div>
                 <p className="mt-1 text-sm text-text-secondary">{f.explanation}</p>
+                {f.guidance && f.guidance.length > 0 && (
+                  <div className="mt-2 rounded border border-teal/30 bg-teal/5 p-2">
+                    <p className="text-xs font-semibold text-teal">What you can do now</p>
+                    <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-sm text-text-secondary">
+                      {f.guidance.map((g) => <li key={g}>{g}</li>)}
+                    </ol>
+                    <p className="mt-1 text-[11px] text-text-muted">General suggestions, not medical treatment. Follow your mission’s procedures.</p>
+                  </div>
+                )}
                 <p className="mt-1 text-xs text-text-muted">Next step: {NEXT_STEP_TEXT[f.nextStep]}</p>
                 <p className="mt-1 text-[11px] text-text-muted">
                   The threshold is illustrative. The spaceflight relevance below comes from NASA/CSA sources.
