@@ -126,16 +126,14 @@ export function rangeStatus(rule: RangeRule, v: number): 'review' | 'attention' 
 export const SLEEP_RULE = {
   /** A single night below this triggers review. */
   singleNightBelowHours: 5,
-  /** This many consecutive recent nights below `consecutiveBelowHours`… */
+  /** This many CONSECUTIVE nights (one entry per night, latest wins) below `consecutiveBelowHours`. */
   consecutiveNights: 3,
   consecutiveBelowHours: 6,
-  /** …all within this window. */
-  windowMs: 96 * HOUR,
 } as const;
 
+/** Counted as consecutive calendar days, one entry per day (latest wins). */
 export const SUSTAINED_SELF_REPORT_RULE = {
   count: 3,
-  windowMs: 96 * HOUR,
   stressAtOrAbove: 4,
   moodAtOrBelow: 2,
 } as const;
@@ -209,7 +207,7 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     metrics: ['sleepDuration'],
     hazards: ['isolation-confinement', 'hostile-closed-environment'],
     evidence: 'demonstration-only',
-    description: `Review if the latest night is under ${SLEEP_RULE.singleNightBelowHours} h, or the last ${SLEEP_RULE.consecutiveNights} nights are all under ${SLEEP_RULE.consecutiveBelowHours} h.`,
+    description: `Review if the latest night is under ${SLEEP_RULE.singleNightBelowHours} h, or each of the last ${SLEEP_RULE.consecutiveNights} consecutive nights is under ${SLEEP_RULE.consecutiveBelowHours} h (one entry per night; a skipped night breaks the streak). Demonstration-only thresholds.`,
   },
   {
     id: 'R-STRESS-SUSTAINED',
@@ -217,7 +215,7 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     metrics: ['stress'],
     hazards: ['isolation-confinement', 'distance-from-earth'],
     evidence: 'demonstration-only',
-    description: `Review if the last ${SUSTAINED_SELF_REPORT_RULE.count} stress self-reports are all ≥ ${SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove}/5.`,
+    description: `Review if stress is ≥ ${SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove}/5 on each of the last ${SUSTAINED_SELF_REPORT_RULE.count} consecutive days (one entry per day). Demonstration-only threshold.`,
   },
   {
     id: 'R-MOOD-LOW',
@@ -225,7 +223,7 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     metrics: ['mood'],
     hazards: ['isolation-confinement', 'distance-from-earth'],
     evidence: 'demonstration-only',
-    description: `Review if the last ${SUSTAINED_SELF_REPORT_RULE.count} mood self-reports are all ≤ ${SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow}/5.`,
+    description: `Review if mood is ≤ ${SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow}/5 on each of the last ${SUSTAINED_SELF_REPORT_RULE.count} consecutive days (one entry per day). Demonstration-only threshold.`,
   },
   {
     id: 'R-SYMPTOMS-REPORTED',

@@ -50,7 +50,8 @@ const normalVitals = () => [
   m('spo2', 98),
 ];
 
-const run = (measurements: Measurement[], checkIns: CheckIn[] = []) => assess({ measurements, checkIns, now: NOW });
+const run = (measurements: Measurement[], checkIns: CheckIn[] = []) =>
+  assess({ measurements, checkIns, now: NOW, utcOffsetMinutes: 0 });
 const ruleIds = (r: ReturnType<typeof run>) => r.findings.map((f) => f.ruleId);
 
 describe('data adequacy and unknown', () => {
@@ -327,5 +328,88 @@ describe('pet wellness derives only from the assessment result', () => {
 
   it('is concerned when symptoms are reported (supportive, not punitive)', () => {
     expect(derivePetWellness(run(normalVitals(), [checkIn(1, { symptoms: ['dizzy'] })]))).toBe('concerned');
+  });
+});
+
+describe('sleep / stress / mood count one entry per night (regression)', () => {
+  // NOW = 2026-11-15 12:00 UTC. Hours-ago values below land on these UTC days:
+  //   1–10 h ago → Nov 15 · 26–34 h ago → Nov 14 · 50 h → Nov 13 · 74 h → Nov 12
+  const sleepIds = (cs: CheckIn[]) => ruleIds(run(normalVitals(), cs)).filter((r) => r === 'R-SLEEP-SHORT');
+
+  it('three 5.5 h check-ins on the SAME day do not count as three nights', () => {
+    const r = run(normalVitals(), [
+      checkIn(3, { sleepHours: 5.5 }),
+      checkIn(2, { sleepHours: 5.5 }),
+      checkIn(1, { sleepHours: 5.5 }),
+    ]);
+    expect(ruleIds(r)).not.toContain('R-SLEEP-SHORT');
+    expect(r.status).toBe('stable');
+  });
+
+  it('uses the latest entry when a night has several', () => {
+    // Nov 13 and 14 short; Nov 15 first entered 5.5 h then corrected to 7.5 h.
+    expect(sleepIds([
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(26, { sleepHours: 5.5 }),
+      checkIn(3, { sleepHours: 5.5 }),
+      checkIn(1, { sleepHours: 7.5 }),
+    ])).toEqual([]);
+  });
+
+  it('a skipped night breaks the streak', () => {
+    // Nov 12, 13, 15 short — no entry for Nov 14.
+    expect(sleepIds([
+      checkIn(74, { sleepHours: 5.5 }),
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(2, { sleepHours: 5.5 }),
+    ])).toEqual([]);
+  });
+
+  it('three consecutive short nights trigger the multi-night review', () => {
+    const r = run(normalVitals(), [
+      checkIn(50, { sleepHours: 5.5 }),
+      checkIn(26, { sleepHours: 5.8 }),
+      checkIn(2, { sleepHours: 5.2 }),
+    ]);
+    const f = r.findings.find((x) => x.ruleId === 'R-SLEEP-SHORT')!;
+    expect(f.status).toBe('review');
+    expect(f.evidence).toBe('demonstration-only');
+    expect(f.explanation).toMatch(/3 consecutive nights/);
+    expect(f.evidenceRefs).toHaveLength(3);
+  });
+
+  it('one entry below 5 h still triggers the single-night review', () => {
+    const r = run(normalVitals(), [checkIn(2, { sleepHours: 4.5 })]);
+    const f = r.findings.find((x) => x.ruleId === 'R-SLEEP-SHORT')!;
+    expect(f.explanation).toMatch(/under 5 h/);
+  });
+
+  it('three consecutive nights that ended more than a day ago do not count', () => {
+    // Nov 11, 12, 13 short, nothing since.
+    expect(sleepIds([
+      checkIn(98, { sleepHours: 5.5 }),
+      checkIn(74, { sleepHours: 5.5 }),
+      checkIn(50, { sleepHours: 5.5 }),
+    ])).toEqual([]);
+  });
+
+  it('applies the same per-day counting to stress and mood', () => {
+    const sameDay = run(normalVitals(), [
+      checkIn(3, { stress: 5, mood: 1 }),
+      checkIn(2, { stress: 5, mood: 1 }),
+      checkIn(1, { stress: 5, mood: 1 }),
+    ]);
+    expect(ruleIds(sameDay)).not.toContain('R-STRESS-SUSTAINED');
+    expect(ruleIds(sameDay)).not.toContain('R-MOOD-LOW');
+  });
+
+  it('respects the local day boundary via utcOffsetMinutes', () => {
+    // 23:00 and 01:00 UTC are different UTC days but the same day at UTC-5.
+    const at = (iso: string, h: number) => ({ ...checkIn(0, { sleepHours: h }), submittedAt: iso });
+    const cs = [at('2026-11-14T01:00:00Z', 5.5), at('2026-11-14T23:00:00Z', 5.5), at('2026-11-15T09:00:00Z', 5.5)];
+    const utc = assess({ measurements: normalVitals(), checkIns: cs, now: NOW, utcOffsetMinutes: 0 });
+    const est = assess({ measurements: normalVitals(), checkIns: cs, now: NOW, utcOffsetMinutes: -300 });
+    expect(utc.findings.map((f) => f.ruleId)).not.toContain('R-SLEEP-SHORT'); // Nov 14 counted once, Nov 13 missing
+    expect(est.findings.map((f) => f.ruleId)).toContain('R-SLEEP-SHORT'); // Nov 13, 14, 15 local
   });
 });

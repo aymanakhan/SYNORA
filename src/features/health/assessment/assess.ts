@@ -29,6 +29,12 @@ export interface AssessmentInput {
   checkIns?: CheckIn[];
   /** Required so results are reproducible (simulator, tests). */
   now: Date;
+  /**
+   * Offset from UTC in minutes used to decide which calendar day (night) an
+   * entry belongs to. Defaults to the runtime's local offset. The simulator
+   * passes 0 because the mission clock is UTC.
+   */
+  utcOffsetMinutes?: number;
 }
 
 /**
@@ -41,6 +47,8 @@ export interface AssessmentInput {
 export function assess(input: AssessmentInput): AssessmentResult {
   const now = input.now;
   const nowMs = now.getTime();
+  const offsetMin = input.utcOffsetMinutes ?? -now.getTimezoneOffset();
+  const dayOf = (t: number) => Math.floor((t + offsetMin * 60_000) / DAY_MS);
 
   // Dedupe by id, ignore future-dated readings, sort by measurement time
   // (handles out-of-order arrival).
@@ -157,27 +165,27 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const energy = selfReportSeries('energy', byMetric, checkIns);
   const sleepQuality = selfReportSeries('sleepQuality', byMetric, checkIns);
 
-  const sleepFinding = evaluateSleep(sleep, nowMs);
+  const sleepFinding = evaluateSleep(sleep, nowMs, dayOf);
   if (sleepFinding) findings.push(sleepFinding);
 
-  const stressRecent = lastNWithin(stress, SUSTAINED_SELF_REPORT_RULE.count, SUSTAINED_SELF_REPORT_RULE.windowMs, nowMs);
+  const stressRecent = lastConsecutiveDays(stress, SUSTAINED_SELF_REPORT_RULE.count, nowMs, dayOf);
   if (stressRecent && stressRecent.every((p) => p.value >= SUSTAINED_SELF_REPORT_RULE.stressAtOrAbove)) {
     findings.push({
       ruleId: 'R-STRESS-SUSTAINED',
       status: 'review',
-      explanation: `Stress self-reported at ${stressRecent.map((p) => p.value).join(', ')}/5 in the last ${stressRecent.length} reports.`,
+      explanation: `Stress self-reported at ${stressRecent.map((p) => p.value).join(', ')}/5 on each of the last ${stressRecent.length} days.`,
       evidenceRefs: stressRecent.map((p) => p.ref),
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
     });
   }
 
-  const moodRecent = lastNWithin(mood, SUSTAINED_SELF_REPORT_RULE.count, SUSTAINED_SELF_REPORT_RULE.windowMs, nowMs);
+  const moodRecent = lastConsecutiveDays(mood, SUSTAINED_SELF_REPORT_RULE.count, nowMs, dayOf);
   if (moodRecent && moodRecent.every((p) => p.value <= SUSTAINED_SELF_REPORT_RULE.moodAtOrBelow)) {
     findings.push({
       ruleId: 'R-MOOD-LOW',
       status: 'review',
-      explanation: `Mood self-reported at ${moodRecent.map((p) => p.value).join(', ')}/5 in the last ${moodRecent.length} reports.`,
+      explanation: `Mood self-reported at ${moodRecent.map((p) => p.value).join(', ')}/5 on each of the last ${moodRecent.length} days.`,
       evidenceRefs: moodRecent.map((p) => p.ref),
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
@@ -273,7 +281,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-interface Point {
+export interface Point {
   value: number;
   at: number;
   ref: string;
@@ -301,21 +309,45 @@ function selfReportSeries(metric: SelfMetric, byMetric: Map<MetricId, Measuremen
   return points.sort((a, b) => a.at - b.at);
 }
 
-function lastNWithin(series: Point[], n: number, windowMs: number, nowMs: number): Point[] | undefined {
-  if (series.length < n) return undefined;
-  const lastN = series.slice(-n);
-  return lastN.every((p) => nowMs - p.at <= windowMs) ? lastN : undefined;
+const DAY_MS = 24 * 60 * 60 * 1000;
+type DayOf = (t: number) => number;
+
+/**
+ * One point per calendar day: when several entries share a day (e.g. the
+ * same check-in submitted three times), only the latest counts. Oldest first.
+ */
+export function onePerDay(series: Point[], dayOf: DayOf): (Point & { day: number })[] {
+  const byDay = new Map<number, Point>();
+  for (const p of series) {
+    const d = dayOf(p.at);
+    const prev = byDay.get(d);
+    if (!prev || p.at >= prev.at) byDay.set(d, p);
+  }
+  return [...byDay.entries()].sort((a, b) => a[0] - b[0]).map(([day, p]) => ({ ...p, day }));
 }
 
-function evaluateSleep(sleep: Point[], nowMs: number): RuleFinding | undefined {
+/**
+ * The last `n` days, if they are n CONSECUTIVE calendar days ending today or
+ * yesterday. A skipped day breaks the streak.
+ */
+function lastConsecutiveDays(series: Point[], n: number, nowMs: number, dayOf: DayOf): Point[] | undefined {
+  const days = onePerDay(series, dayOf);
+  if (days.length < n) return undefined;
+  const lastN = days.slice(-n);
+  if (dayOf(nowMs) - lastN[n - 1].day > 1) return undefined; // not recent
+  for (let i = 1; i < n; i++) if (lastN[i].day !== lastN[i - 1].day + 1) return undefined;
+  return lastN;
+}
+
+function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf): RuleFinding | undefined {
   const latest = sleep[sleep.length - 1];
   if (!latest || nowMs - latest.at > FRESHNESS_MS.selfReport) return undefined;
-  const recent = lastNWithin(sleep, SLEEP_RULE.consecutiveNights, SLEEP_RULE.windowMs, nowMs);
+  const recent = lastConsecutiveDays(sleep, SLEEP_RULE.consecutiveNights, nowMs, dayOf);
   if (recent && recent.every((p) => p.value < SLEEP_RULE.consecutiveBelowHours)) {
     return {
       ruleId: 'R-SLEEP-SHORT',
       status: 'review',
-      explanation: `Sleep under ${SLEEP_RULE.consecutiveBelowHours} h for the last ${recent.length} nights (${recent
+      explanation: `Sleep under ${SLEEP_RULE.consecutiveBelowHours} h on each of the last ${recent.length} consecutive nights (${recent
         .map((p) => fmt(p.value))
         .join(', ')} h).`,
       evidenceRefs: recent.map((p) => p.ref),

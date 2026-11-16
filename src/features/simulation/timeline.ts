@@ -22,7 +22,7 @@ export function assessSimulatedDay(id: ScenarioId, day: number): AssessmentResul
     const c = validateCheckIn(d.checkIn, { profileId: 'preview', now, generateId: gen });
     if (c.ok) checkIns.push(c.checkIn);
   }
-  return assess({ measurements, checkIns, now });
+  return assess({ measurements, checkIns, now, utcOffsetMinutes: 0 });
 }
 
 const cache = new Map<ScenarioId, AssessmentStatus[]>();

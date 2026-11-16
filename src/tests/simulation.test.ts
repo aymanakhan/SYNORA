@@ -23,7 +23,7 @@ function assessDay(id: ScenarioId, day: number) {
     if (!c.ok) throw new Error(`invalid simulated check-in day ${d.day}: ${JSON.stringify(c.errors)}`);
     checkIns.push(c.checkIn);
   }
-  return assess({ measurements, checkIns, now });
+  return assess({ measurements, checkIns, now, utcOffsetMinutes: 0 });
 }
 
 describe('mission simulator', () => {

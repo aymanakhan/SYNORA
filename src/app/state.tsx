@@ -240,7 +240,7 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   const now = mode === 'simulated' ? simulatedNow(sim.day) : realNow;
 
   const assessment = useMemo(
-    () => (ready ? assess({ measurements, checkIns, now }) : undefined),
+    () => (ready ? assess({ measurements, checkIns, now, utcOffsetMinutes: mode === 'simulated' ? 0 : undefined }) : undefined),
     // `now` is derived from these; avoid re-running on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ready, measurements, checkIns, mode, sim.day, realNow],
