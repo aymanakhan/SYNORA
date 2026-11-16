@@ -148,6 +148,21 @@ export const CHECK_IN_FLAG_THRESHOLDS = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Radiation (demonstration-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Illustrative radiation thresholds for the demo. They are NOT NASA
+ * exposure limits; SYNORA has not reviewed a source that sets them.
+ */
+export const RADIATION_RULE = {
+  /** Latest reading, normalised to mSv per 24 h. */
+  dailyRate: { reviewAtOrAbove: 2, attentionAtOrAbove: 10 },
+  /** Sum of all recorded doses, mSv. */
+  cumulative: { reviewAtOrAbove: 150, attentionAtOrAbove: 300 },
+} as const;
+
+// ---------------------------------------------------------------------------
 // Personal baseline
 // ---------------------------------------------------------------------------
 
@@ -201,6 +216,22 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
     evidence: 'demonstration-only',
     description: describeBand(r),
   })),
+  {
+    id: 'R-RAD-DOSE-RATE',
+    title: 'High radiation dose rate',
+    metrics: ['radiationDose'],
+    hazards: ['radiation'],
+    evidence: 'demonstration-only',
+    description: `Latest dosimeter reading normalised to 24 h: review at ≥ ${RADIATION_RULE.dailyRate.reviewAtOrAbove} mSv/day, attention at ≥ ${RADIATION_RULE.dailyRate.attentionAtOrAbove} mSv/day. Illustrative values, not NASA limits.`,
+  },
+  {
+    id: 'R-RAD-CUMULATIVE',
+    title: 'Cumulative mission radiation dose',
+    metrics: ['radiationDose'],
+    hazards: ['radiation'],
+    evidence: 'demonstration-only',
+    description: `Sum of all recorded doses: review at ≥ ${RADIATION_RULE.cumulative.reviewAtOrAbove} mSv, attention at ≥ ${RADIATION_RULE.cumulative.attentionAtOrAbove} mSv. Unrecorded periods are not filled in. Illustrative values, not NASA limits.`,
+  },
   {
     id: 'R-SLEEP-SHORT',
     title: 'Short sleep',

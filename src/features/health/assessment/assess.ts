@@ -19,6 +19,7 @@ import {
   MIN_CORE_VITALS_FOR_ASSESSMENT,
   RANGE_RULES,
   SLEEP_RULE,
+  RADIATION_RULE,
   SUSTAINED_SELF_REPORT_RULE,
   rangeStatus,
 } from './rules';
@@ -158,6 +159,53 @@ export function assess(input: AssessmentInput): AssessmentResult {
     limitations.push(`Personal baseline not yet established for: ${noBaseline.join(', ')}.`);
   }
 
+  // --- Radiation: dose rate and cumulative dose ------------------------------
+  const radReadings = (byMetric.get('radiationDose') ?? []).filter((m) => typeof m.value === 'number');
+  let radiation: AssessmentResult['radiation'];
+  if (radReadings.length > 0) {
+    const total = radReadings.reduce((sum, m) => sum + (m.value as number), 0);
+    const last = radReadings[radReadings.length - 1];
+    const lastFresh = latestFresh('radiationDose');
+    // A reading without a stated period is treated as covering ≤ 24 h (conservative).
+    const rate = lastFresh ? ((lastFresh.value as number) * 24) / Math.min(24, lastFresh.exposurePeriodHours ?? 24) : undefined;
+    radiation = {
+      totalMSv: total,
+      readings: radReadings.length,
+      latestDailyRateMSv: rate,
+      firstAt: radReadings[0].measuredAt,
+      lastAt: last.measuredAt,
+    };
+    if (lastFresh && rate !== undefined) {
+      const R = RADIATION_RULE.dailyRate;
+      const st = rate >= R.attentionAtOrAbove ? 'attention' : rate >= R.reviewAtOrAbove ? 'review' : undefined;
+      if (st) {
+        usedRefs.add(lastFresh.id);
+        findings.push({
+          ruleId: 'R-RAD-DOSE-RATE',
+          status: st,
+          explanation: `Latest dosimeter reading ${fmt3(lastFresh.value as number)} mSv${
+            lastFresh.exposurePeriodHours ? ` over ${fmt(lastFresh.exposurePeriodHours)} h` : ' (period not stated)'
+          } ≈ ${fmt3(rate)} mSv per day, in the demonstration ${st} range.`,
+          evidenceRefs: [lastFresh.id],
+          evidence: 'demonstration-only',
+          nextStep: st === 'attention' ? 'consult-flight-surgeon' : 'verify-measurement',
+        });
+      }
+    }
+    const C = RADIATION_RULE.cumulative;
+    const cst = total >= C.attentionAtOrAbove ? 'attention' : total >= C.reviewAtOrAbove ? 'review' : undefined;
+    if (cst) {
+      findings.push({
+        ruleId: 'R-RAD-CUMULATIVE',
+        status: cst,
+        explanation: `Recorded radiation dose adds up to ${fmt(total)} mSv across ${radReadings.length} readings, in the demonstration ${cst} range. Periods without a reading are not included.`,
+        evidenceRefs: [last.id],
+        evidence: 'demonstration-only',
+        nextStep: cst === 'attention' ? 'consult-flight-surgeon' : 'review-guidance',
+      });
+    }
+  }
+
   // --- Self-report patterns -------------------------------------------------
   const sleep = selfReportSeries('sleepDuration', byMetric, checkIns);
   const stress = selfReportSeries('stress', byMetric, checkIns);
@@ -274,6 +322,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
     nextStep: pickNextStep(status, findings),
     basedOnSyntheticData,
     checkInFlags,
+    ...(radiation ? { radiation } : {}),
   };
 }
 
@@ -395,6 +444,10 @@ function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore:
         status === 'attention' ? 'human medical review' : 'review'
       }. This is a monitoring flag, not a diagnosis.`;
   }
+}
+
+function fmt3(n: number): string {
+  return Number(n.toFixed(3)).toString();
 }
 
 function fmt(n: number): string {

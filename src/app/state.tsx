@@ -9,7 +9,7 @@ import type {
   RawCheckInInput,
   RawMeasurementInput,
 } from '../features/health/types';
-import { MISSION_DAYS, generateDay, generateWindow, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
+import { MISSION_DAYS, generateDay, generateWindow, radiationHistory, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
 import {
   deleteManualCheckIn,
   deleteManualMeasurement,
@@ -181,6 +181,10 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
         const days = appendOnly ? [generateDay(scenarioId, day)] : generateWindow(scenarioId, day);
         if (!appendOnly) await r.clearRecords(PROFILE_ID, { synthetic: true });
         const now = simulatedNow(day);
+        // Full dosimeter history so the cumulative mission dose is complete.
+        if (!appendOnly) {
+          for (const raw of radiationHistory(scenarioId, days[0].day)) await ingestMeasurement(raw, { profileId: PROFILE_ID, now }, r);
+        }
         for (const d of days) {
           for (const raw of d.measurements) await ingestMeasurement(raw, { profileId: PROFILE_ID, now }, r);
           await ingestCheckIn(d.checkIn, { profileId: PROFILE_ID, now }, r);

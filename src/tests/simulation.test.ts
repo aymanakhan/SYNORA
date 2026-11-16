@@ -96,3 +96,25 @@ describe('mission simulator', () => {
     expect(assessDay('recovery', 90).status).toBe('stable');
   });
 });
+
+describe('solar particle event scenario', () => {
+  it('stable before, attention at the storm peak, and a mission total that keeps growing', async () => {
+    const { assessSimulatedDay } = await import('../features/simulation/timeline');
+    expect(assessSimulatedDay('radiation-event', 93).status).toBe('stable');
+    const peak = assessSimulatedDay('radiation-event', 96);
+    expect(peak.status).toBe('attention');
+    expect(peak.findings.map((f) => f.ruleId)).toContain('R-RAD-DOSE-RATE');
+    expect(assessSimulatedDay('radiation-event', 100).status).toBe('stable');
+    const late = assessSimulatedDay('radiation-event', 175);
+    expect(late.findings.map((f) => f.ruleId)).toContain('R-RAD-CUMULATIVE');
+    expect(late.radiation!.readings).toBe(175);
+  });
+
+  it('the stable scenario never reaches the cumulative threshold', async () => {
+    const { assessSimulatedDay } = await import('../features/simulation/timeline');
+    const end = assessSimulatedDay('stable', 180);
+    expect(end.radiation!.readings).toBe(180);
+    expect(end.radiation!.totalMSv).toBeLessThan(150);
+    expect(end.status).toBe('stable');
+  });
+});

@@ -2,7 +2,7 @@ import { assess } from '../health/assessment';
 import type { AssessmentResult, AssessmentStatus, CheckIn, Measurement } from '../health/types';
 import { validateCheckIn } from '../../services/ingestion/validateCheckIn';
 import { validateMeasurement } from '../../services/ingestion/validate';
-import { MISSION_DAYS, generateWindow, simulatedNow, type ScenarioId } from './scenarios';
+import { MISSION_DAYS, generateWindow, radiationHistory, simulatedNow, type ScenarioId } from './scenarios';
 
 /**
  * Assess one simulated day through the real validation and assessment code,
@@ -14,7 +14,12 @@ export function assessSimulatedDay(id: ScenarioId, day: number): AssessmentResul
   const gen = () => `${id}-${day}-${++n}`;
   const measurements: Measurement[] = [];
   const checkIns: CheckIn[] = [];
-  for (const d of generateWindow(id, day)) {
+  const window = generateWindow(id, day);
+  for (const raw of radiationHistory(id, window[0].day)) {
+    const r = validateMeasurement(raw, { profileId: 'preview', now, generateId: gen });
+    if (r.ok) measurements.push(r.measurement);
+  }
+  for (const d of window) {
     for (const raw of d.measurements) {
       const r = validateMeasurement(raw, { profileId: 'preview', now, generateId: gen });
       if (r.ok) measurements.push(r.measurement);

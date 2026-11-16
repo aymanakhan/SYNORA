@@ -20,7 +20,7 @@ const DASHBOARD_METRICS: MetricId[] = [
 ];
 
 export function MetricCards() {
-  const { now } = useSynora();
+  const { now, assessment } = useSynora();
 
   const { latest, flagFor, isStale } = useLatestReadings();
 
@@ -57,6 +57,12 @@ export function MetricCards() {
                   {l.suspect && <Pill tone="review">Re-measure suggested</Pill>}
                 </div>
                 {l.method && <p className="mt-1 text-[11px] text-text-muted">{l.method}</p>}
+                {id === 'radiationDose' && assessment?.radiation && (
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Recorded total: <strong className="tabular-nums">{assessment.radiation.totalMSv.toFixed(1)} mSv</strong>{' '}
+                    <span className="text-text-muted">from {assessment.radiation.readings} reading{assessment.radiation.readings === 1 ? '' : 's'}</span>
+                  </p>
+                )}
               </>
             ) : (
               <>

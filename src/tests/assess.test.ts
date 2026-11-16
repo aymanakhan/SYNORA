@@ -413,3 +413,52 @@ describe('sleep / stress / mood count one entry per night (regression)', () => {
     expect(est.findings.map((f) => f.ruleId)).toContain('R-SLEEP-SHORT'); // Nov 13, 14, 15 local
   });
 });
+
+describe('radiation rules (demonstration-only)', () => {
+  const dose = (mSv: number, hoursAgo = 2, period?: number) =>
+    m('radiationDose', mSv, hoursAgo, period === undefined ? {} : { exposurePeriodHours: period });
+  const rad = (r: ReturnType<typeof run>) => r.findings.filter((f) => f.ruleId.startsWith('R-RAD'));
+
+  it('a normal daily dose is stable and reported in the summary', () => {
+    const r = run([...normalVitals(), dose(0.6, 2, 24)]);
+    expect(rad(r)).toEqual([]);
+    expect(r.status).toBe('stable');
+    expect(r.radiation).toMatchObject({ totalMSv: 0.6, readings: 1, latestDailyRateMSv: 0.6 });
+  });
+
+  it('flags a high dose rate (review) and a very high one (attention)', () => {
+    expect(rad(run([...normalVitals(), dose(3, 2, 24)]))[0]).toMatchObject({ ruleId: 'R-RAD-DOSE-RATE', status: 'review' });
+    expect(rad(run([...normalVitals(), dose(12, 2, 24)]))[0]).toMatchObject({ ruleId: 'R-RAD-DOSE-RATE', status: 'attention', nextStep: 'consult-flight-surgeon' });
+  });
+
+  it('normalises by the exposure period', () => {
+    // 6 mSv over 72 h = 2 mSv/day → review; 6 mSv over 12 h = 12 mSv/day → attention.
+    expect(rad(run([...normalVitals(), dose(6, 2, 72)]))[0].status).toBe('review');
+    expect(rad(run([...normalVitals(), dose(6, 2, 12)]))[0].status).toBe('attention');
+  });
+
+  it('treats a reading without a period as covering one day', () => {
+    expect(rad(run([...normalVitals(), dose(3, 2)]))[0].status).toBe('review');
+  });
+
+  it('a huge single entry is never "stable"', () => {
+    const r = run([...normalVitals(), dose(500, 2, 24)]);
+    expect(r.status).toBe('attention');
+    expect(rad(r).map((f) => f.ruleId).sort()).toEqual(['R-RAD-CUMULATIVE', 'R-RAD-DOSE-RATE']);
+  });
+
+  it('adds up the mission dose, including old readings', () => {
+    // 160 daily readings of 1 mSv (each one is a normal rate) → 160 mSv cumulative → review
+    const history = Array.from({ length: 160 }, (_, i) => dose(1, 24 * (i + 1), 24));
+    const r = run([...normalVitals(), ...history]);
+    expect(r.radiation?.totalMSv).toBe(160);
+    expect(rad(r)).toEqual([expect.objectContaining({ ruleId: 'R-RAD-CUMULATIVE', status: 'review' })]);
+  });
+
+  it('a stale high reading still counts toward the total but not the rate', () => {
+    const r = run([...normalVitals(), dose(12, 24 * 10, 24)]);
+    expect(rad(r)).toEqual([]);
+    expect(r.radiation?.totalMSv).toBe(12);
+    expect(r.radiation?.latestDailyRateMSv).toBeUndefined();
+  });
+});

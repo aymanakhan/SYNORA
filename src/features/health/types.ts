@@ -193,6 +193,18 @@ export interface AssessmentResult {
   basedOnSyntheticData: boolean;
   /** Recent self-report signals; used by the pet's `tired` state. */
   checkInFlags: CheckInFlag[];
+  /** Radiation dose recorded so far (sum of dosimeter readings in the input). */
+  radiation?: RadiationSummary;
+}
+
+export interface RadiationSummary {
+  /** Sum of all recorded doses, mSv. Gaps are not filled in. */
+  totalMSv: number;
+  readings: number;
+  /** Latest reading normalised to a 24 h rate, mSv/day (if it has a period). */
+  latestDailyRateMSv?: number;
+  firstAt?: string;
+  lastAt?: string;
 }
 
 // ---------------------------------------------------------------------------
