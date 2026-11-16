@@ -10,6 +10,7 @@ import { SummaryPage } from '../features/summary/SummaryPage';
 import { Trends } from '../features/trends/Trends';
 import { StatusBadge } from '../components/ui';
 import { SECTIONS, navigate, useSection, type SectionId } from './nav';
+import { StartupScreen } from './StartupScreen';
 import { SynoraProvider, useSynora } from './state';
 
 const SCREENS: Record<SectionId, () => JSX.Element | null> = {
@@ -33,7 +34,7 @@ export default function App() {
 
 function Shell() {
   const section = useSection();
-  const { ready, profile, mode, sim, assessment, storageWarning } = useSynora();
+  const { ready, profile, mode, sim, assessment, storageWarning, replacedByNewerVersion } = useSynora();
   const Screen = SCREENS[section];
   const needsOnboarding = ready && profile && !profile.petSpecies;
 
@@ -73,6 +74,12 @@ function Shell() {
         Educational prototype, not a medical device. SYNORA does not diagnose or prescribe treatment. Demo data is synthetic.
         {storageWarning && <span className="ml-2 text-review">{storageWarning}</span>}
       </p>
+      {replacedByNewerVersion && (
+        <p className="flex flex-wrap items-center gap-2 border-b border-review/40 bg-review/10 px-4 py-2 text-sm text-review sm:px-6" role="alert">
+          A newer version of SYNORA was opened in another tab. Reload this tab to keep saving changes.
+          <button className="underline" onClick={() => window.location.reload()}>Reload now</button>
+        </p>
+      )}
 
       <div className="flex flex-1 flex-col md:flex-row">
         {!needsOnboarding && (
@@ -97,7 +104,7 @@ function Shell() {
 
         <main id="main" className="min-w-0 flex-1 p-4 sm:p-6">
           {!ready ? (
-            <p className="text-text-muted">Loading local demo data…</p>
+            <StartupScreen />
           ) : needsOnboarding ? (
             <Onboarding onDone={() => navigate('dashboard')} />
           ) : (

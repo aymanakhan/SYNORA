@@ -12,8 +12,25 @@ interface SynoraDB extends DBSchema {
 export class IndexedDbRepository implements HealthRepository {
   private constructor(private db: IDBPDatabase<SynoraDB>) {}
 
-  static async open(name = 'synora'): Promise<IndexedDbRepository> {
+  /**
+   * @param hooks.onBlocked  another tab still has an older version open, so
+   *   the upgrade waits until that tab closes or reloads.
+   * @param hooks.onReplaced  a newer version opened in another tab; this
+   *   connection has been closed so it doesn't block that upgrade.
+   */
+  static async open(
+    name = 'synora',
+    hooks: { onBlocked?: () => void; onReplaced?: () => void } = {},
+  ): Promise<IndexedDbRepository> {
     const db = await openDB<SynoraDB>(name, 2, {
+      blocked() {
+        hooks.onBlocked?.();
+      },
+      blocking() {
+        // Never block a newer version: close and let the UI ask for a reload.
+        db.close();
+        hooks.onReplaced?.();
+      },
       upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           db.createObjectStore('profiles', { keyPath: 'id' });

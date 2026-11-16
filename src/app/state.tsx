@@ -40,8 +40,19 @@ export interface LastUpdate {
   label: string;
 }
 
+export type StartupIssue =
+  | { kind: 'blocked' }
+  | { kind: 'slow' }
+  | { kind: 'error'; message: string };
+
 interface SynoraContext {
   ready: boolean;
+  /** Why the app hasn't finished loading, if something is wrong. */
+  startupIssue?: StartupIssue;
+  /** Another tab opened a newer version; this tab must reload to keep saving. */
+  replacedByNewerVersion: boolean;
+  continueWithoutSaving: () => void;
+  resetLocalData: () => Promise<void>;
   storageWarning?: string;
   profile?: DemoProfile;
   mode: DataMode;
@@ -106,6 +117,8 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   const initial = useMemo(loadPrefs, []);
   const [repo, setRepo] = useState<HealthRepository>();
   const [storageWarning, setStorageWarning] = useState<string>();
+  const [startupIssue, setStartupIssue] = useState<StartupIssue>();
+  const [replacedByNewerVersion, setReplaced] = useState(false);
   const [profile, setProfile] = useState<DemoProfile>();
   const [mode, setModeState] = useState<DataMode>(initial.mode);
   const [sim, setSim] = useState<SimState>({ ...initial.sim, playing: false });
@@ -131,19 +144,23 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     (async () => {
       let r: HealthRepository;
       try {
-        r = await IndexedDbRepository.open();
+        r = await IndexedDbRepository.open('synora', {
+          onBlocked: () => !cancelled && setStartupIssue({ kind: 'blocked' }),
+          onReplaced: () => setReplaced(true),
+        });
+        if (!cancelled) setStartupIssue(undefined);
       } catch {
         r = new MemoryRepository();
         setStorageWarning('Browser storage is unavailable, so data will not be kept after reload.');
       }
-      let p = await r.getProfile(PROFILE_ID);
-      if (!p) {
-        p = { id: PROFILE_ID, displayName: 'Demo Astronaut (fictional)', kind: 'demo', createdAt: new Date().toISOString() };
-        await r.saveProfile(p);
-      }
-      if (!cancelled) {
-        setRepo(r);
-        setProfile(p);
+      try {
+        const p = await ensureProfile(r);
+        if (!cancelled) {
+          setRepo(r);
+          setProfile(p);
+        }
+      } catch (e) {
+        if (!cancelled) setStartupIssue({ kind: 'error', message: (e as Error)?.message ?? String(e) });
       }
     })();
     return () => {
@@ -199,13 +216,51 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!repo) return;
     (async () => {
-      // Always rebuild the simulated window on startup so it matches the saved scenario/day.
-      await loadSimulation(repo, sim.scenarioId, sim.day);
-      await refresh(repo, mode);
-      setReady(true);
+      try {
+        // Always rebuild the simulated window on startup so it matches the saved scenario/day.
+        await loadSimulation(repo, sim.scenarioId, sim.day);
+        await refresh(repo, mode);
+        setStartupIssue(undefined);
+        setReady(true);
+      } catch (e) {
+        setStartupIssue({ kind: 'error', message: (e as Error)?.message ?? String(e) });
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
+
+  // If loading takes unusually long without a known cause, say so.
+  useEffect(() => {
+    if (ready) return;
+    const t = setTimeout(() => setStartupIssue((i) => i ?? { kind: 'slow' }), 8000);
+    return () => clearTimeout(t);
+  }, [ready]);
+
+  /** Escape hatch: run from memory for this visit (nothing is saved). */
+  const continueWithoutSaving = useCallback(() => {
+    const r = new MemoryRepository();
+    setStorageWarning('Running without saving: changes in this visit will be lost when you reload.');
+    setStartupIssue(undefined);
+    loadedSim.current = undefined;
+    void ensureProfile(r).then((p) => {
+      setProfile(p);
+      setRepo(r);
+    });
+  }, []);
+
+  /** Delete this browser's SYNORA demo data and reload. */
+  const resetLocalData = useCallback(async () => {
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase('synora');
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    });
+    try {
+      localStorage.removeItem(PREFS_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  }, []);
 
   const setMode = useCallback(
     (m: DataMode) => {
@@ -375,6 +430,10 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
 
   const value: SynoraContext = {
     ready,
+    startupIssue,
+    replacedByNewerVersion,
+    continueWithoutSaving,
+    resetLocalData,
     storageWarning,
     profile,
     mode,
@@ -399,6 +458,15 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     resetData,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+async function ensureProfile(r: HealthRepository): Promise<DemoProfile> {
+  let p = await r.getProfile(PROFILE_ID);
+  if (!p) {
+    p = { id: PROFILE_ID, displayName: 'Demo Astronaut (fictional)', kind: 'demo', createdAt: new Date().toISOString() };
+    await r.saveProfile(p);
+  }
+  return p;
 }
 
 export function defaultPetName(species: PetSpecies): string {
