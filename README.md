@@ -117,6 +117,16 @@ React 18 · TypeScript · Vite · Tailwind CSS v4 · Recharts · IndexedDB (`idb
 
 ![Dashboard at the peak of the atypical-vital scenario](docs/screenshots/02-dashboard-attention.png)
 
+## AI assistance (Super Intelligence disclosure)
+
+SYNORA was built with AI assistance, as permitted by the NASA Space Apps Challenge when disclosed:
+
+- **Tool:** Claude Code (Anthropic's AI coding assistant).
+- **Used for:** planning the architecture, writing and testing most of the application code, drafting documentation (including this README), and summarising the NASA and CSA web pages listed in `resources/nasa/reference-links.md`.
+- **Team role:** team Terra.Byte set the requirements and made the design decisions (features, which thresholds to label as illustrative, pet commands, gestures, layout), reviewed and tested the results, and approved every change through GitHub pull requests.
+- **Assets:** the pixel art (pet sprites, body figure, logo) is drawn in code rather than with image generators, and the pet sounds are synthesised in code. No NASA logos or branding are used.
+- **Metadata:** AI co-authorship is recorded on each commit (`Co-Authored-By: Claude`).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
