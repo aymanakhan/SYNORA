@@ -82,3 +82,16 @@ body {
 .anim-bob { animation: bob 1.2s ease-in-out; }
 .anim-gills { animation: gills 0.4s ease-in-out 3; }
 .anim-heart, .anim-bubbles { animation: rise 1.2s ease-out forwards; }
+
+/* ---- Body overview: gentle hover/focus feedback ---- */
+.body-region:hover,
+.body-region:focus-visible {
+  filter: brightness(1.18);
+}
+.body-label:hover text:first-of-type,
+.body-label:focus-visible text:first-of-type {
+  fill: #f8fafc;
+}
+.body-label:focus-visible rect {
+  fill: #38bdf81a;
+}
