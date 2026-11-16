@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { navigate } from '../../app/nav';
 import { useSynora } from '../../app/state';
 import { Button, Card } from '../../components/ui';
-import { RULE_DEFINITIONS } from '../health/assessment';
+import { RULE_DEFINITIONS, ruleDescription } from '../health/assessment';
+import { METRICS } from '../health/metrics';
+import { UNIT_CHOICE_METRICS, displayUnit } from '../health/units';
 import { SOURCES } from '../health/knowledge';
 
 export function SettingsPage() {
-  const { resetData, storageWarning, profile } = useSynora();
+  const { resetData, storageWarning, profile, displayUnits, setDisplayUnit } = useSynora();
   const [done, setDone] = useState<string>();
 
   return (
@@ -44,6 +46,26 @@ export function SettingsPage() {
         </p>
       </Card>
 
+      <Card title="Units">
+        <p className="mb-3 text-sm text-text-secondary">
+          Values, warnings, charts and limits are shown in these units. Entering a measurement in a different unit also switches it here.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {UNIT_CHOICE_METRICS.map((m) => (
+            <label key={m} className="block text-sm">
+              <span className="text-text-secondary">{METRICS[m].label}</span>
+              <select
+                className="w-full rounded border border-white/15 bg-panel px-3 py-2 text-sm"
+                value={displayUnit(m, displayUnits)}
+                onChange={(e) => setDisplayUnit(m, e.target.value)}
+              >
+                {METRICS[m].acceptedUnits.map((u) => <option key={u}>{u}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      </Card>
+
       <Card title="About SYNORA">
         <div className="space-y-2 text-sm text-text-secondary">
           <p>An educational prototype for the NASA Space Apps Challenge 2026. It is <strong>not a medical device</strong> and does not diagnose or prescribe treatment.</p>
@@ -52,7 +74,7 @@ export function SettingsPage() {
           <ul className="list-disc space-y-1 pl-5 text-xs">
             {RULE_DEFINITIONS.map((r) => (
               <li key={r.id}>
-                <strong>{r.id}</strong>: {r.description}
+                <strong>{r.id}</strong>: {ruleDescription(r.id, displayUnits)}
               </li>
             ))}
           </ul>

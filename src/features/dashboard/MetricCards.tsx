@@ -2,6 +2,7 @@ import { useSynora } from '../../app/state';
 import { LearnMore } from '../../components/LearnMore';
 import { Pill, SourceBadge } from '../../components/ui';
 import { timeAgo } from '../../lib/format';
+import { formatIn } from '../health/units';
 import { statusStyle } from '../../theme/tokens';
 import { METRICS } from '../health/metrics';
 import type { MetricId } from '../health/types';
@@ -20,7 +21,7 @@ const DASHBOARD_METRICS: MetricId[] = [
 ];
 
 export function MetricCards() {
-  const { now, assessment } = useSynora();
+  const { now, assessment, displayUnits } = useSynora();
 
   const { latest, flagFor, isStale } = useLatestReadings();
 
@@ -59,7 +60,7 @@ export function MetricCards() {
                 {l.method && <p className="mt-1 text-[11px] text-text-muted">{l.method}</p>}
                 {id === 'radiationDose' && assessment?.radiation && (
                   <p className="mt-1 text-xs text-text-secondary">
-                    Recorded total: <strong className="tabular-nums">{assessment.radiation.totalMSv.toFixed(1)} mSv</strong>{' '}
+                    Recorded total: <strong className="tabular-nums">{formatIn('radiationDose', assessment.radiation.totalMSv, displayUnits)}</strong>{' '}
                     <span className="text-text-muted">from {assessment.radiation.readings} reading{assessment.radiation.readings === 1 ? '' : 's'}</span>
                   </p>
                 )}

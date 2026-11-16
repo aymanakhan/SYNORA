@@ -8,6 +8,7 @@ import { METRICS } from '../health/metrics';
 import type { AssessmentStatus, MetricId } from '../health/types';
 import { DataContextBanner } from '../dashboard/DataContextBanner';
 import { MISSION_START_MS } from '../simulation/scenarios';
+import { displayUnit, formatNumberIn, toDisplay } from '../health/units';
 
 interface Point {
   t: number;
@@ -127,7 +128,11 @@ function worst(list: (AssessmentStatus | undefined)[]): AssessmentStatus | undef
 
 function MetricChart({ metric, title, data, simulated }: { metric: MetricId; title: string; data: Point[]; simulated: boolean }) {
   const def = METRICS[metric];
-  const unit = def.canonicalUnit.replace('scale 1–5', '/5');
+  const { displayUnits } = useSynora();
+  // Values and thresholds are stored canonically; show them in the user's unit.
+  const conv = (v: number) => (metric === 'bloodPressure' ? v : Number(toDisplay(metric, v, displayUnits).value.toFixed(3)));
+  const unit = displayUnit(metric, displayUnits).replace('scale 1–5', '/5');
+  const shown = data.map((p) => ({ ...p, a: p.a == null ? p.a : conv(p.a), b: p.b == null ? p.b : conv(p.b) }));
   const rules = RANGE_RULES.filter((r) => r.metric === metric);
   const thresholds = rules.flatMap((r) => [r.review.highAtOrAbove, r.review.lowBelow].filter((x): x is number => x !== undefined));
   const real = data.filter((p) => p.a != null);
@@ -167,7 +172,7 @@ function MetricChart({ metric, title, data, simulated }: { metric: MetricId; tit
       ) : (
         <div className="h-48" role="img" aria-label={`${title} chart with ${real.length} readings, ${flagged} outside demonstration range`}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+            <LineChart data={shown} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#ffffff12" />
               <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={fmtTick} stroke={colors.textMuted} fontSize={11} />
               <YAxis stroke={colors.textMuted} fontSize={11} domain={def.integer ? [1, 5] : ['auto', 'auto']} allowDecimals={!def.integer} width={48} tickFormatter={(v: number) => String(Number(v.toFixed(3)))} />
@@ -177,7 +182,7 @@ function MetricChart({ metric, title, data, simulated }: { metric: MetricId; tit
                 formatter={(v: number, n: string) => [`${v} ${unit}`, metric === 'bloodPressure' ? (n === 'a' ? 'Systolic' : 'Diastolic') : def.label]}
               />
               {thresholds.map((y) => (
-                <ReferenceLine key={y} y={y} stroke={colors.review} strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: `demo ${y}`, fill: colors.textMuted, fontSize: 10, position: rules.some((r) => r.review.lowBelow === y) ? 'insideBottomLeft' : 'insideTopLeft' }} />
+                <ReferenceLine key={y} y={conv(y)} stroke={colors.review} strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: `demo ${formatNumberIn(metric, y, displayUnits)}`, fill: colors.textMuted, fontSize: 10, position: rules.some((r) => r.review.lowBelow === y) ? 'insideBottomLeft' : 'insideTopLeft' }} />
               ))}
               <Line dataKey="a" stroke={colors.cyan} strokeWidth={2} dot={dot} connectNulls={false} isAnimationActive={false} />
               {metric === 'bloodPressure' && <Line dataKey="b" stroke={colors.teal} strokeWidth={2} dot={dot} connectNulls={false} isAnimationActive={false} />}

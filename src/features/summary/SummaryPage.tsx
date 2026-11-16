@@ -9,7 +9,7 @@ import { getScenario } from '../simulation/scenarios';
 
 /** On-screen, source-aware summary a crew member could review with a flight surgeon. Nothing is sent anywhere. */
 export function SummaryPage() {
-  const { assessment, measurements, checkIns, mode, sim, profile, now } = useSynora();
+  const { assessment, measurements, checkIns, mode, sim, profile, now, displayUnits } = useSynora();
   const [copied, setCopied] = useState(false);
 
   const latest = useMemo(() => {
@@ -37,7 +37,7 @@ export function SummaryPage() {
     `Suggested next step: ${NEXT_STEP_TEXT[assessment.nextStep]}`,
     '',
     'Latest readings:',
-    ...latest.map((m) => `- ${METRICS[m.metric].label}: ${formatValue(m)} ${formatUnit(m)} at ${m.measuredAt} (${SOURCE_LABEL[m.source]})`),
+    ...latest.map((m) => `- ${METRICS[m.metric].label}: ${formatValue(m, displayUnits)} ${formatUnit(m, displayUnits)} at ${m.measuredAt} (${SOURCE_LABEL[m.source]})`),
     '',
     `Check-ins recorded: ${checkIns.length}`,
     `Missing current data: ${assessment.missingData.map((m) => METRICS[m].label).join(', ') || 'none'}`,
@@ -87,7 +87,7 @@ export function SummaryPage() {
               {latest.map((m) => (
                 <tr key={m.id}>
                   <td className="py-1.5 pr-3">{METRICS[m.metric].label}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatValue(m)} {formatUnit(m)}</td>
+                  <td className="py-1.5 pr-3 tabular-nums">{formatValue(m, displayUnits)} {formatUnit(m, displayUnits)}</td>
                   <td className="py-1.5 pr-3 text-text-muted">{formatDateTime(m.measuredAt)}</td>
                   <td className="py-1.5 text-text-muted">{SOURCE_LABEL[m.source]}</td>
                 </tr>

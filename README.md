@@ -56,6 +56,7 @@ No accounts, API keys, or network access are needed for the demo.
 | "What you can do now" guidance on every finding | ✅ |
 | Today's routine: reminders, "Measure now" links, pet stars/treats/streak | ✅ |
 | Edit/Delete manual readings and check-ins; one check-in per day | ✅ |
+| Display units (°C/°F, mg/dL/mmol/L, h/min, mSv/µSv) used everywhere: warnings, cards, charts, limits; set in Settings or by entering a value | ✅ |
 | CI: tests + build on every pull request | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
