@@ -33,13 +33,17 @@ const inputCls =
  * Manual measurement form. With `editing`, it corrects that saved entry
  * (same id, same measurement type) instead of adding a new one.
  */
-export function ManualEntryForm({ editing, onDone }: { editing?: Measurement; onDone?: () => void } = {}) {
+export function ManualEntryForm({
+  editing,
+  initialMetric,
+  onDone,
+}: { editing?: Measurement; initialMetric?: MetricId; onDone?: () => void } = {}) {
   const { addManualMeasurement, editManualMeasurement } = useSynora();
   const uid = useId();
   const fid = (k: string) => `${uid}-${k}`;
   const orig = editing?.original;
   const shown = orig ?? (editing ? { value: editing.value, unit: editing.unit } : undefined);
-  const [metric, setMetric] = useState<MetricId>(editing?.metric ?? 'heartRate');
+  const [metric, setMetric] = useState<MetricId>(editing?.metric ?? initialMetric ?? 'heartRate');
   const def = METRICS[metric];
   const [unit, setUnit] = useState(shown?.unit ?? def.canonicalUnit);
   const [value, setValue] = useState(shown && typeof shown.value === 'number' ? String(shown.value) : '');

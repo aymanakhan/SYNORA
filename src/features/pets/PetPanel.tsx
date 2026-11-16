@@ -6,6 +6,8 @@ import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, resolveComma
 import { GestureControl } from '../pet-input/GestureControl';
 import { VoiceControl } from '../pet-input/VoiceControl';
 import { PetSprite } from './PetSprite';
+import { TREAT } from '../routine/routine';
+import { useRoutine } from '../routine/useRoutine';
 import { playPetSound, useSoundPrefs } from './sound';
 import { SPECIES_LABEL } from './sprites';
 import { PET_MESSAGES, derivePetWellness } from './wellness';
@@ -16,6 +18,8 @@ const WELLNESS_LABEL = { happy: 'Happy', tired: 'Tired', concerned: 'Concerned',
 export function PetPanel({ compact = false, withGestures = false }: { compact?: boolean; withGestures?: boolean }) {
   const { profile, assessment } = useSynora();
   const sound = useSoundPrefs();
+  const routine = useRoutine();
+  const [celebrating, setCelebrating] = useState(false);
   const [action, setAction] = useState<{ cmd: PetCommand; resolved: ResolvedAction }>();
   const lastAt = useRef<number>();
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -38,6 +42,28 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
   );
 
   useEffect(() => () => clearTimeout(timer.current), []);
+
+  // Celebrate once per day when the manual routine is complete: the next time
+  // the pet is on screen. Cosmetic only; wellness is unchanged.
+  const { mode } = useSynora();
+  useEffect(() => {
+    if (mode !== 'manual' || !routine.complete) return;
+    const key = 'synora.celebrated.v1';
+    const today = new Date().toDateString();
+    try {
+      if (localStorage.getItem(key) === today) return;
+      localStorage.setItem(key, today);
+    } catch {
+      /* storage unavailable: celebrate anyway */
+    }
+    setCelebrating(true);
+    setAction({ cmd: 'jump', resolved: resolveCommand(species, 'jump') });
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setAction(undefined);
+      setCelebrating(false);
+    }, 3000);
+  }, [routine.complete, mode, species]);
 
   // Keyboard shortcuts 1–6 (ignored while typing in a form field).
   useEffect(() => {
@@ -71,6 +97,20 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
           Feeling: <strong>{WELLNESS_LABEL[wellness]}</strong>
         </p>
         <p className={`text-sm text-text-secondary ${compact ? 'line-clamp-2' : 'max-w-xs'}`}>{PET_MESSAGES[wellness]}</p>
+        <p className="mt-1 text-xs text-text-muted" aria-label={`Routine: ${routine.done} of ${routine.total} tasks logged today`}>
+          <span className="font-pixel text-mint">{'★'.repeat(routine.done)}</span>
+          <span className="font-pixel">{'☆'.repeat(routine.total - routine.done)}</span>
+          {routine.complete ? (
+            <span className="ml-1 text-stable">
+              {TREAT[species].emoji} treat earned{routine.streakDays > 1 ? ` · ${routine.streakDays}-day streak` : ''}
+            </span>
+          ) : (
+            <span className="ml-1">{routine.done}/{routine.total} logged today</span>
+          )}
+        </p>
+        {celebrating && (
+          <p className="text-sm text-stable" role="status">Routine complete! {name} got {TREAT[species].name} {TREAT[species].emoji}</p>
+        )}
         {!compact && assessment && (
           <p className="mt-1 flex items-center justify-center gap-1 text-xs text-text-muted">
             Mood follows the monitoring result: <StatusBadge status={assessment.status} />

@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { navigate } from '../../app/nav';
+import { useEffect, useState } from 'react';
+import { hashParam, navigate } from '../../app/nav';
+import { isMetricId } from '../health/metrics';
 import { useSynora } from '../../app/state';
 import { Button, Card, Pill, SourceBadge } from '../../components/ui';
 import { formatDateTime, formatUnit, formatValue, timeAgo } from '../../lib/format';
 import { METRICS } from '../health/metrics';
-import type { Measurement } from '../health/types';
+import type { Measurement, MetricId } from '../health/types';
 import { MISSION_DAYS, SCENARIOS, type ScenarioId } from '../simulation/scenarios';
 import { ManualEntryForm } from './ManualEntryForm';
 
@@ -18,7 +19,14 @@ const SOURCES: { id: Source; title: string; subtitle: string }[] = [
 
 export function LiveMonitoring() {
   const { mode, setMode } = useSynora();
-  const [source, setSource] = useState<Source>(mode);
+  // A reminder can link here with ?metric=… to open the manual form on that measurement.
+  const requested = hashParam('metric');
+  const initialMetric = requested && isMetricId(requested) ? requested : undefined;
+  const [source, setSource] = useState<Source>(initialMetric ? 'manual' : mode);
+  useEffect(() => {
+    if (initialMetric && mode !== 'manual') setMode('manual');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMetric]);
 
   const choose = (s: Source) => {
     setSource(s);
@@ -51,7 +59,7 @@ export function LiveMonitoring() {
       </div>
 
       {source === 'simulated' && <SimulatedFeed />}
-      {source === 'manual' && <ManualPanel />}
+      {source === 'manual' && <ManualPanel initialMetric={initialMetric} />}
       {source === 'device' && <DevicePanel />}
 
       <div className="flex flex-wrap gap-2">
@@ -143,7 +151,7 @@ function SimulatedFeed() {
   );
 }
 
-function ManualPanel() {
+function ManualPanel({ initialMetric }: { initialMetric?: MetricId }) {
   const { measurements, now, lastUpdate, deleteMeasurement } = useSynora();
   const [editing, setEditing] = useState<Measurement>();
   const recent = [...measurements].reverse().filter((m) => m.source === 'manual').slice(0, 10);
@@ -162,7 +170,7 @@ function ManualPanel() {
         actions={<SourceBadge source="manual" />}
       >
         {/* key resets the form when switching between new entry and editing */}
-        <ManualEntryForm key={editing?.id ?? 'new'} editing={editing} onDone={() => setEditing(undefined)} />
+        <ManualEntryForm key={editing?.id ?? `new-${initialMetric ?? ''}`} editing={editing} initialMetric={initialMetric} onDone={() => setEditing(undefined)} />
       </Card>
       <Card title="Recent manual entries">
         <StatusRow label="Mode">Manual entry</StatusRow>
