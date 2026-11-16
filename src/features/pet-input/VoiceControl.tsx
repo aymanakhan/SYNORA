@@ -36,7 +36,7 @@ export function VoiceControl({ onCommand, species }: { onCommand: (cmd: PetComma
   const rec = useRef<SpeechRecognitionLike>();
 
   if (!Ctor) {
-    return <p className="text-xs text-text-muted">Voice commands are not supported in this browser. The buttons and keys 1–5 work.</p>;
+    return <p className="text-xs text-text-muted">Voice commands are not supported in this browser. The buttons and keys 1–4 work.</p>;
   }
 
   const listen = () => {

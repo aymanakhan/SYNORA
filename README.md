@@ -35,7 +35,7 @@ No accounts, API keys, or network access are needed for the demo.
 5. **Check-In:** log `4` hours of sleep. The result becomes **Review** (short sleep) and the pet becomes concerned.
 6. **Today's routine:** on the dashboard (manual entries), use **Measure now** on a reminder. Complete all six tasks and the pet earns a treat. Mistakes can be fixed with **Edit**/**Delete** in Live Monitoring → Manual and in Check-In history.
 7. **Solar particle event:** in Mission Simulator, choose that scenario and **D96 · Storm peak** for a radiation attention; **D175** shows the cumulative-dose review.
-8. **Pet:** try the command buttons or keys 1–5 (sit, stand, jump, pet, play; for the axolotl, Stand is **Float**). The status doesn't change.
+8. **Pet:** try the command buttons or keys 1–4 (sit, stand, jump, pet; for the axolotl, Stand is **Float**). The status doesn't change.
 9. **Reload the page:** the pet, manual entries and check-ins are still there.
 10. **Trends** and **Summary:** charts with the demonstration thresholds and flagged points, plus a copyable, source-labelled summary.
 
@@ -61,13 +61,13 @@ No accounts, API keys, or network access are needed for the demo.
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
 | Pet sounds (synthesized, off by default, volume) and Pixelify Sans pixel font (OFL) | ✅ |
-| Camera hand gestures (MediaPipe, in-browser, opt-in): ☝ stand · 👇 sit · ✊ jump · ✋ pet · 👋 play | ✅ beta: see below |
+| Camera hand gestures (MediaPipe, in-browser, opt-in): ☝ stand · 👇 sit · ✊ jump · ✋ pet | ✅ beta: see below |
 | Push-to-talk voice commands (Web Speech API, disclosed) | ✅ beta: needs a real mic test |
 | Auth0 accounts | not started (needs a tenant) |
 
 ## Camera gestures (optional)
 
-On the **Pet** page, choose *Enable camera gestures*. Video is processed in the browser and is never recorded, stored or uploaded. Stopping it, or switching tabs, releases the camera. Buttons and keys 1–5 always work.
+On the **Pet** page, choose *Enable camera gestures*. Video is processed in the browser and is never recorded, stored or uploaded. Stopping it, or switching tabs, releases the camera. Buttons and keys 1–4 always work.
 
 | Gesture | Command |
 |---|---|
@@ -75,9 +75,8 @@ On the **Pet** page, choose *Enable camera gestures*. Video is processed in the 
 | 👇 Pointing down | sit |
 | ✊ Fist | jump |
 | ✋ Open palm, held still | pet |
-| 👋 Wave | play |
 
-Pointing up, fist and open palm come from MediaPipe's built-in recognizer. Pointing down is worked out from the hand landmarks, and wave from side-to-side wrist movement. An open palm must be held still briefly so that a wave isn't read as pet.
+Pointing up, fist and open palm come from MediaPipe's built-in recognizer, and pointing down is worked out from the hand landmarks. An open palm must be held still briefly so a hand passing the camera doesn't trigger pet.
 
 The MediaPipe runtime is bundled with the app. The ~8 MB gesture model is **downloaded during the GitHub Pages build** (see `.github/workflows/deploy-pages.yml`) and served from the site itself. After the first online visit, the browser caches the runtime and model, so gestures also work **offline** at the venue. Please check the model card's licence before relying on it for the submission: https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer
 

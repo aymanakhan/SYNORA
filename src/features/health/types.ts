@@ -222,7 +222,7 @@ export type PetWellness = 'happy' | 'tired' | 'concerned' | 'unknown';
  * User-triggered commands. Never affect health state or readings.
  * (No separate "float": for the axolotl, `stand` is shown and labelled as Float.)
  */
-export type PetCommand = 'sit' | 'stand' | 'jump' | 'pet' | 'play';
+export type PetCommand = 'sit' | 'stand' | 'jump' | 'pet';
 
 /** Temporary animation state produced by a command. */
 export type PetAction = 'idle' | PetCommand;

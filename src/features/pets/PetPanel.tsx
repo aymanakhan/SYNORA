@@ -65,7 +65,7 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
     }, 3000);
   }, [routine.complete, mode, species]);
 
-  // Keyboard shortcuts 1–5 (ignored while typing in a form field).
+  // Keyboard shortcuts 1–4 (ignored while typing in a form field).
   useEffect(() => {
     if (compact) return;
     const onKey = (e: KeyboardEvent) => {
@@ -128,7 +128,7 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
             ))}
           </div>
           <p className="min-h-5 text-xs text-text-muted" aria-live="polite">
-            {action ? `${name} ${action.resolved.verb}.` : 'Tap a command or press keys 1–5.'}
+            {action ? `${name} ${action.resolved.verb}.` : 'Tap a command or press keys 1–4.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-text-muted">
             <button

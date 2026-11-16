@@ -44,7 +44,7 @@ export function PetSprite({
       {animation === 'pet' || animation === 'gills' ? (
         <span aria-hidden className="anim-heart absolute -top-1 right-2 text-lg text-[#F4A7B9]">♥</span>
       ) : null}
-      {species === 'axolotl' && (animation === 'play' || animation === 'float') ? (
+      {species === 'axolotl' && animation === 'float' ? (
         <span aria-hidden className="anim-bubbles absolute top-2 left-1 text-sm text-cyan/80">∘ ° ∘</span>
       ) : null}
       {wellness === 'tired' ? (

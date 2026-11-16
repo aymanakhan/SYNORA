@@ -16,7 +16,7 @@ describe('pet command controller', () => {
 
   it("has no separate float command; the axolotl's stand is labelled Float", async () => {
     const { commandLabel } = await import('../features/pets/commands');
-    expect(COMMANDS).toEqual(['sit', 'stand', 'jump', 'pet', 'play']);
+    expect(COMMANDS).toEqual(['sit', 'stand', 'jump', 'pet']);
     expect(commandLabel('axolotl', 'stand')).toBe('float');
     expect(commandLabel('cat', 'stand')).toBe('stand');
     expect(resolveCommand('axolotl', 'stand').animation).toBe('float');
