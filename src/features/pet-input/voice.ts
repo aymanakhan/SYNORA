@@ -6,7 +6,6 @@ const WORDS: [RegExp, PetCommand][] = [
   [/\b(stand|stand up|get up|up)\b/, 'stand'],
   [/\b(jump|hop|bounce)\b/, 'jump'],
   [/\b(pet|good (boy|girl|kitty|pup)|cuddle)\b/, 'pet'],
-  [/\b(play|let's play|fetch)\b/, 'play'],
 ];
 
 /** For the axolotl, "float" is the name of its stand command. */
@@ -26,5 +25,5 @@ export function parseVoiceCommand(transcript: string, species?: PetSpecies): Pet
 
 /** Words to suggest in the UI, matching the pet's buttons. */
 export function voiceHints(species?: PetSpecies): string[] {
-  return ['sit', species === 'axolotl' ? 'float' : 'stand', 'jump', 'pet', 'play'];
+  return ['sit', species === 'axolotl' ? 'float' : 'stand', 'jump', 'pet'];
 }

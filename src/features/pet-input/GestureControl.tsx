@@ -116,7 +116,7 @@ export function GestureControl({ onCommand, species }: { onCommand: (cmd: PetCom
       setPhase('error');
       setError(
         name === 'NotAllowedError'
-          ? 'Camera permission was denied. The buttons and keys 1–5 still work.'
+          ? 'Camera permission was denied. The buttons and keys 1–4 still work.'
           : name === 'NotFoundError'
             ? 'No camera was found.'
             : !navigator.onLine
@@ -127,7 +127,7 @@ export function GestureControl({ onCommand, species }: { onCommand: (cmd: PetCom
   }, [stop]);
 
   if (!supported) {
-    return <p className="text-xs text-text-muted">Camera gestures are not supported in this browser. The buttons and keys 1–5 work.</p>;
+    return <p className="text-xs text-text-muted">Camera gestures are not supported in this browser. The buttons and keys 1–4 work.</p>;
   }
 
   const seenLabel = seen === 'hand' ? 'Hand (no command gesture)' : seen ? `${GESTURE_COMMANDS[seen].emoji} ${GESTURE_COMMANDS[seen].label}` : 'No hand';

@@ -34,13 +34,12 @@ const run = (fs: GestureFrame[], g = new GestureInterpreter()) => fs.map((f) => 
 const repeat = <T,>(n: number, x: T) => Array.from({ length: n }, () => x);
 
 describe('gesture mapping', () => {
-  it('maps the five gestures the team chose', () => {
+  it('maps the four gestures the team chose', () => {
     expect(Object.fromEntries(Object.entries(GESTURE_COMMANDS).map(([k, v]) => [k, v.command]))).toEqual({
       Pointing_Up: 'stand',
       Pointing_Down: 'sit',
       Closed_Fist: 'jump',
       Open_Palm: 'pet',
-      Wave: 'play',
     });
     for (const { command } of Object.values(GESTURE_COMMANDS)) expect(COMMANDS).toContain(command);
   });
@@ -82,7 +81,7 @@ describe('static gestures', () => {
   });
 });
 
-describe('open palm (pet) vs wave (play)', () => {
+describe('open palm (pet)', () => {
   const palm = (x: number) => ({ gesture: 'Open_Palm', landmarks: hand({ wristX: x, open: true }) });
 
   it('an open palm held still → pet', () => {
@@ -94,17 +93,17 @@ describe('open palm (pet) vs wave (play)', () => {
     expect(run(frames(repeat(5, palm(0.5))))).toEqual([]);
   });
 
-  it('a hand waving side to side → play, not pet', () => {
+  it('a hand moving side to side does not pet (no wave/play gesture any more)', () => {
     const xs = [0.4, 0.5, 0.6, 0.5, 0.4, 0.5, 0.6, 0.5];
-    expect(run(frames(xs.map(palm)))).toEqual(['play']);
+    expect(run(frames(xs.map(palm)))).toEqual([]);
   });
 
-  it('a moving palm that does not swing back and forth is neither pet nor wave', () => {
+  it('a palm passing across the camera does not pet', () => {
     const xs = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65];
     expect(run(frames(xs.map(palm)))).toEqual([]);
   });
 
-  it('small jitter does not count as a wave', () => {
+  it('small jitter still counts as holding still', () => {
     const xs = [0.5, 0.505, 0.5, 0.505, 0.5, 0.505, 0.5, 0.505];
     expect(run(frames(xs.map(palm)))).toEqual(['pet']);
   });

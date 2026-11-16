@@ -8,8 +8,11 @@ describe('parseVoiceCommand', () => {
     ['stand up', 'stand'],
     ['JUMP!', 'jump'],
     ['good boy', 'pet'],
-    ["let's play", 'play'],
   ])('"%s" → %s', (t, cmd) => expect(parseVoiceCommand(t)).toBe(cmd));
+
+  it('no longer recognises play', () => {
+    expect(parseVoiceCommand("let's play")).toBeUndefined();
+  });
 
   it('returns undefined for unrelated speech', () => {
     expect(parseVoiceCommand('what is my heart rate')).toBeUndefined();
@@ -35,7 +38,7 @@ describe("float is the axolotl's stand", () => {
   });
   it('suggests the words that match the buttons', async () => {
     const { voiceHints } = await import('../features/pet-input/voice');
-    expect(voiceHints('axolotl')).toEqual(['sit', 'float', 'jump', 'pet', 'play']);
-    expect(voiceHints('dog')).toEqual(['sit', 'stand', 'jump', 'pet', 'play']);
+    expect(voiceHints('axolotl')).toEqual(['sit', 'float', 'jump', 'pet']);
+    expect(voiceHints('dog')).toEqual(['sit', 'stand', 'jump', 'pet']);
   });
 });

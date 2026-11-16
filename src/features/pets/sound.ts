@@ -41,7 +41,7 @@ export function playPetSound(species: PetSpecies, command: PetCommand, volume: n
   const ac = audio();
   if (!ac || volume <= 0) return;
   const v = Math.min(1, volume) * 0.25;
-  const excited = command === 'jump' || command === 'play';
+  const excited = command === 'jump';
   if (species === 'cat') {
     // "mew": rising then falling glide
     tone(ac, { type: 'triangle', from: 600, to: excited ? 1100 : 900, start: 0, dur: 0.14, gain: v });
