@@ -62,13 +62,9 @@ No accounts, API keys, or network access are needed for the demo.
 
 On the **Pet** page, choose *Enable camera gestures*. Video is processed in the browser and is never recorded, stored or uploaded. Stopping it, or switching tabs, releases the camera. Buttons and keys 1–6 always work.
 
-The MediaPipe runtime is bundled with the app. The ~8 MB model is not committed yet. To make gestures work **offline**, run:
+The MediaPipe runtime is bundled with the app. The ~8 MB gesture model is **downloaded during the GitHub Pages build** (see `.github/workflows/deploy-pages.yml`) and served from the site itself. After the first online visit, the browser caches the runtime and model, so gestures also work **offline** at the venue. Please check the model card's licence before relying on it for the submission: https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer
 
-```bash
-npm run fetch-gesture-model
-```
-
-Check the model card's licence before committing `public/models/gesture_recognizer.task`. Without the file, the app loads the model from Google's model storage (needs internet) and says so in the UI.
+For local runs, `npm run fetch-gesture-model` does the same download. Without the file, the app falls back to Google's hosted copy (needs internet) and says so.
 
 **Tested:** permission denied, missing model, runtime served from our own origin, camera released after a failure, buttons unaffected (headless browser with a fake camera). **Not yet tested:** recognition with a real webcam and hand. Please try it on a laptop before the demo.
 

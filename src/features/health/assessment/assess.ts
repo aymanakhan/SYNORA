@@ -303,6 +303,17 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const confidence: AssessmentResult['confidence'] =
     !adequate ? 'low' : freshCore.length >= CORE_VITALS.length && !anySuspect ? 'high' : 'moderate';
 
+  // Explain "unknown" caused by old readings (e.g. entered the night before a demo).
+  let staleNote: string | undefined;
+  const newestCore = CORE_VITALS.map((m) => byMetric.get(m)?.at(-1)).filter((m): m is Measurement => !!m);
+  if (!adequate && newestCore.length > 0) {
+    const newest = Math.max(...newestCore.map((m) => Date.parse(m.measuredAt)));
+    const hours = Math.round((nowMs - newest) / 3_600_000);
+    if (hours * 3_600_000 > FRESHNESS_MS.physiological) {
+      staleNote = `Your latest core readings are from ${hours} h ago, and readings count as current for ${FRESHNESS_MS.physiological / 3_600_000} h. Take today's measurements to get a current result.`;
+    }
+  }
+
   if (!adequate) {
     limitations.push(
       `Only ${freshCore.length} of ${CORE_VITALS.length} core vitals have a current reading; at least ${MIN_CORE_VITALS_FOR_ASSESSMENT} are needed for a stable result.`,
@@ -322,7 +333,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
     status,
     assessedAt: now.toISOString(),
     findings,
-    explanation: summarize(status, findings, freshCore.length),
+    explanation: summarize(status, findings, freshCore.length, staleNote),
     confidence,
     limitations,
     missingData,
@@ -440,10 +451,10 @@ function pickNextStep(status: AssessmentStatus, findings: RuleFinding[]): NextSt
   );
 }
 
-function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore: number): string {
+function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore: number, staleNote?: string): string {
   switch (status) {
     case 'unknown':
-      return 'Not enough current, reliable readings to assess. Record more measurements.';
+      return staleNote ?? 'Not enough current, reliable readings to assess. Record more measurements.';
     case 'stable':
       return `No demonstration rule was triggered across ${freshCore} current core vitals. This is not proof of good health.`;
     default:

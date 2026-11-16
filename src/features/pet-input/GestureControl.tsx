@@ -16,30 +16,22 @@ type Phase = 'off' | 'starting' | 'on' | 'error';
 
 let recognizerPromise: Promise<{ recognizer: GestureRecognizer; remote: boolean }> | undefined;
 
-async function hasLocalModel(): Promise<boolean> {
-  try {
-    const r = await fetch(LOCAL_MODEL, { method: 'HEAD' });
-    const type = r.headers.get('content-type') ?? '';
-    // SPA fallbacks return index.html for missing files.
-    return r.ok && !type.includes('text/html');
-  } catch {
-    return false;
-  }
-}
-
 function loadRecognizer() {
   recognizerPromise ??= (async () => {
     const { GestureRecognizer } = await import('@mediapipe/tasks-vision');
-    const local = await hasLocalModel();
-    const recognizer = await GestureRecognizer.createFromOptions(
-      { wasmLoaderPath: `${WASM_BASE}/vision_wasm_internal.js`, wasmBinaryPath: `${WASM_BASE}/vision_wasm_internal.wasm` },
-      {
-        baseOptions: { modelAssetPath: local ? LOCAL_MODEL : REMOTE_MODEL, delegate: 'CPU' },
+    const wasm = { wasmLoaderPath: `${WASM_BASE}/vision_wasm_internal.js`, wasmBinaryPath: `${WASM_BASE}/vision_wasm_internal.wasm` };
+    const create = (modelAssetPath: string) =>
+      GestureRecognizer.createFromOptions(wasm, {
+        baseOptions: { modelAssetPath, delegate: 'CPU' },
         runningMode: 'VIDEO',
         numHands: 1,
-      },
-    );
-    return { recognizer, remote: !local };
+      });
+    // Bundled model first (works offline); Google's hosted copy only as a fallback.
+    try {
+      return { recognizer: await create(LOCAL_MODEL), remote: false };
+    } catch {
+      return { recognizer: await create(REMOTE_MODEL), remote: true };
+    }
   })();
   recognizerPromise.catch(() => {
     recognizerPromise = undefined;
@@ -123,7 +115,9 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
           ? 'Camera permission was denied. The buttons and keys 1–6 still work.'
           : name === 'NotFoundError'
             ? 'No camera was found.'
-            : 'Gesture recognition could not start (the model or runtime failed to load). The buttons still work.',
+            : !navigator.onLine
+              ? 'You’re offline and the gesture model isn’t saved on this device yet. Open SYNORA once while online, then gestures work offline. The buttons still work.'
+              : 'Gesture recognition could not start (the model or runtime failed to load). The buttons still work.',
       );
     }
   }, [stop]);

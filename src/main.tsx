@@ -15,8 +15,24 @@ createRoot(document.getElementById('root')!).render(
 // Offline support for the production build only (dev server stays uncached).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-      /* offline reload unavailable; the app still works online */
-    });
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then(() => navigator.serviceWorker.ready)
+      .then(() => {
+        // Once idle, warm the cache with the optional gesture files (~18 MB) so
+        // camera gestures also work on a later offline visit.
+        const warm = () => {
+          void import('@mediapipe/tasks-vision').catch(() => undefined);
+          for (const f of ['mediapipe/vision_wasm_internal.js', 'mediapipe/vision_wasm_internal.wasm', 'models/gesture_recognizer.task']) {
+            void fetch(`${import.meta.env.BASE_URL}${f}`).catch(() => undefined);
+          }
+        };
+        const w = window as Window & { requestIdleCallback?: (cb: () => void) => void };
+        if (w.requestIdleCallback) w.requestIdleCallback(warm);
+        else setTimeout(warm, 3000);
+      })
+      .catch(() => {
+        /* offline reload unavailable; the app still works online */
+      });
   });
 }

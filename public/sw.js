@@ -1,7 +1,7 @@
 /* SYNORA service worker: makes the built app reload offline.
  * Caches only the app shell and its static assets (never health data,
  * which lives in IndexedDB). Bump VERSION to invalidate old caches. */
-const VERSION = 'synora-v2';
+const VERSION = 'synora-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])));
@@ -32,13 +32,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Hashed static assets: cache first.
+  // Hashed static assets: cache first. Never cache an HTML fallback page
+  // under an asset URL (e.g. a missing model file served as index.html).
   event.respondWith(
     caches.match(req).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {
-          if (res.ok) {
+          if (res.ok && !(res.headers.get('content-type') || '').includes('text/html')) {
             const copy = res.clone();
             caches.open(VERSION).then((c) => c.put(req, copy));
           }

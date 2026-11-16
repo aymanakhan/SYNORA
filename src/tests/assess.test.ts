@@ -490,3 +490,14 @@ describe('practical guidance on findings', () => {
     expect(all).not.toMatch(/\b(mg|tablet|pill|aspirin|ibuprofen|paracetamol|acetaminophen|insulin|dose of)\b/);
   });
 });
+
+describe('stale readings explanation', () => {
+  it('explains that yesterday’s readings are too old', () => {
+    const r = run([m('heartRate', 70, 26), m('spo2', 98, 26), m('bodyTemperature', 36.7, 30)]);
+    expect(r.status).toBe('unknown');
+    expect(r.explanation).toMatch(/from 26 h ago.*current for 24 h/);
+  });
+  it('keeps the generic message when there are no readings at all', () => {
+    expect(run([]).explanation).toMatch(/Not enough current/);
+  });
+});
