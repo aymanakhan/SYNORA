@@ -14,8 +14,17 @@ describe('pet command controller', () => {
     }
   });
 
-  it('labels axolotl equivalents instead of faking sit/stand/jump', () => {
-    for (const c of ['sit', 'stand', 'jump'] as const) {
+  it("has no separate float command; the axolotl's stand is labelled Float", async () => {
+    const { commandLabel } = await import('../features/pets/commands');
+    expect(COMMANDS).toEqual(['sit', 'stand', 'jump', 'pet', 'play']);
+    expect(commandLabel('axolotl', 'stand')).toBe('float');
+    expect(commandLabel('cat', 'stand')).toBe('stand');
+    expect(resolveCommand('axolotl', 'stand').animation).toBe('float');
+    expect(resolveCommand('dog', 'stand').animation).toBe('stand');
+  });
+
+  it('labels axolotl equivalents instead of faking sit/jump', () => {
+    for (const c of ['sit', 'jump'] as const) {
       const r = resolveCommand('axolotl', c);
       expect(r.equivalent).toBe(true);
       expect(r.verb).toMatch(/axolotl equivalent/);

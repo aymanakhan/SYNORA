@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GestureRecognizer } from '@mediapipe/tasks-vision';
-import type { PetCommand } from '../health/types';
-import { GESTURE_COMMANDS, GestureStabilizer } from './gestures';
+import type { PetCommand, PetSpecies } from '../health/types';
+import { commandLabel } from '../pets/commands';
+import { GESTURE_COMMANDS, GestureInterpreter, type GestureKey } from './gestures';
 
 /** Bundled with the app (see scripts/fetch-gesture-model.mjs) for offline use. */
 const LOCAL_MODEL = `${import.meta.env.BASE_URL}models/gesture_recognizer.task`;
@@ -43,16 +44,18 @@ function loadRecognizer() {
  * Opt-in camera hand gestures. Frames are processed in the browser and are
  * never recorded, stored or uploaded. Off by default; stopping releases the camera.
  */
-export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, source: string) => void }) {
+export function GestureControl({ onCommand, species }: { onCommand: (cmd: PetCommand, source: string) => void; species?: PetSpecies }) {
+  const commandLabelRef = useRef((c: PetCommand) => commandLabel(species ?? 'cat', c));
+  commandLabelRef.current = (c: PetCommand) => commandLabel(species ?? 'cat', c);
   const [phase, setPhase] = useState<Phase>('off');
   const [error, setError] = useState<string>();
   const [remoteModel, setRemoteModel] = useState(false);
-  const [seen, setSeen] = useState<{ gesture: string; score: number }>();
+  const [seen, setSeen] = useState<GestureKey | 'hand'>();
   const [lastFired, setLastFired] = useState<string>();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream>();
   const rafRef = useRef<number>();
-  const stabilizer = useRef(new GestureStabilizer());
+  const interpreter = useRef(new GestureInterpreter());
   const onCommandRef = useRef(onCommand);
   onCommandRef.current = onCommand;
 
@@ -64,7 +67,7 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = undefined;
     if (videoRef.current) videoRef.current.srcObject = null;
-    stabilizer.current.reset();
+    interpreter.current.reset();
     setSeen(undefined);
     setPhase('off');
   }, []);
@@ -98,10 +101,11 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
         last = now;
         const res = recognizer.recognizeForVideo(video, now);
         const top = res.gestures[0]?.[0];
-        setSeen(top ? { gesture: top.categoryName, score: top.score } : undefined);
-        const fired = stabilizer.current.push({ gesture: top?.categoryName, score: top?.score ?? 0, t: now });
+        const landmarks = res.landmarks[0]?.map((p) => ({ x: p.x, y: p.y }));
+        const fired = interpreter.current.push({ gesture: top?.categoryName, score: top?.score ?? 0, t: now, landmarks });
+        setSeen(interpreter.current.seen ?? (landmarks ? 'hand' : undefined));
         if (fired) {
-          setLastFired(`${GESTURE_COMMANDS[fired.gesture].label} → ${fired.command}`);
+          setLastFired(`${GESTURE_COMMANDS[fired.gesture].label} → ${commandLabelRef.current(fired.command)}`);
           onCommandRef.current(fired.command, 'gesture');
         }
       };
@@ -112,7 +116,7 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
       setPhase('error');
       setError(
         name === 'NotAllowedError'
-          ? 'Camera permission was denied. The buttons and keys 1–6 still work.'
+          ? 'Camera permission was denied. The buttons and keys 1–5 still work.'
           : name === 'NotFoundError'
             ? 'No camera was found.'
             : !navigator.onLine
@@ -123,10 +127,10 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
   }, [stop]);
 
   if (!supported) {
-    return <p className="text-xs text-text-muted">Camera gestures are not supported in this browser. The buttons and keys 1–6 work.</p>;
+    return <p className="text-xs text-text-muted">Camera gestures are not supported in this browser. The buttons and keys 1–5 work.</p>;
   }
 
-  const seenLabel = seen && seen.gesture !== 'None' ? `${GESTURE_COMMANDS[seen.gesture]?.label ?? seen.gesture} (${Math.round(seen.score * 100)}%)` : 'No gesture';
+  const seenLabel = seen === 'hand' ? 'Hand (no command gesture)' : seen ? `${GESTURE_COMMANDS[seen].emoji} ${GESTURE_COMMANDS[seen].label}` : 'No hand';
 
   return (
     <div className="w-full rounded border border-white/10 bg-panel p-3 text-left text-xs">
@@ -146,10 +150,12 @@ export function GestureControl({ onCommand }: { onCommand: (cmd: PetCommand, sou
           {remoteModel && <p className="text-review">Model loaded from Google’s model storage (needs internet).</p>}
         </div>
       </div>
-      <ul className="mt-2 grid grid-cols-3 gap-1 text-text-muted">
-        <li>✋ Open palm → stand/float</li>
-        <li>☝ Pointing up → sit/settle</li>
-        <li>✊ Fist → jump/bob</li>
+      <ul className="mt-2 grid grid-cols-1 gap-1 text-text-muted sm:grid-cols-2">
+        {(Object.keys(GESTURE_COMMANDS) as GestureKey[]).map((k) => (
+          <li key={k}>
+            {GESTURE_COMMANDS[k].emoji} {GESTURE_COMMANDS[k].label} → {commandLabel(species ?? 'cat', GESTURE_COMMANDS[k].command)}
+          </li>
+        ))}
       </ul>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {phase === 'on' || phase === 'starting' ? (

@@ -9,8 +9,6 @@ describe('parseVoiceCommand', () => {
     ['JUMP!', 'jump'],
     ['good boy', 'pet'],
     ["let's play", 'play'],
-    ['float around', 'float'],
-    ['can you swim', 'float'],
   ])('"%s" → %s', (t, cmd) => expect(parseVoiceCommand(t)).toBe(cmd));
 
   it('returns undefined for unrelated speech', () => {
@@ -25,5 +23,19 @@ describe('parseVoiceCommand', () => {
 
   it('picks the first command spoken', () => {
     expect(parseVoiceCommand('jump then sit')).toBe('jump');
+  });
+});
+
+describe("float is the axolotl's stand", () => {
+  it('maps float/swim to stand for the axolotl only', () => {
+    expect(parseVoiceCommand('float around', 'axolotl')).toBe('stand');
+    expect(parseVoiceCommand('can you swim', 'axolotl')).toBe('stand');
+    expect(parseVoiceCommand('float around', 'cat')).toBeUndefined();
+    expect(parseVoiceCommand('stand up', 'axolotl')).toBe('stand');
+  });
+  it('suggests the words that match the buttons', async () => {
+    const { voiceHints } = await import('../features/pet-input/voice');
+    expect(voiceHints('axolotl')).toEqual(['sit', 'float', 'jump', 'pet', 'play']);
+    expect(voiceHints('dog')).toEqual(['sit', 'stand', 'jump', 'pet', 'play']);
   });
 });

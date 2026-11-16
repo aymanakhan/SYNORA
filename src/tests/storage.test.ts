@@ -116,3 +116,21 @@ describe('validateCheckIn', () => {
     if (!r.ok) expect(r.errors.map((e) => e.field)).toContain(field);
   });
 });
+
+describe.each(factories)('%s batch ingestion', (_name, make) => {
+  it('validates every item with the same rules and stores the valid ones in one batch', async () => {
+    const { ingestBatch } = await import('../services/ingestion/ingest');
+    const repo = await make();
+    const r = await ingestBatch(
+      [hr(60, 'simulated', 30), hr(62, 'simulated', 20), hr(999, 'simulated', 10)],
+      [{ submittedAt: NOW.getTime() - 60_000, sleepHours: 7, synthetic: true }, { submittedAt: NOW.getTime(), mood: 9, synthetic: true }],
+      { profileId: 'a', now: NOW, generateId: id },
+      repo,
+    );
+    expect(r).toEqual({ saved: 3, rejected: 2 });
+    const ms = await repo.listMeasurements('a', { synthetic: true });
+    expect(ms.map((m) => m.value)).toEqual([60, 62]);
+    expect(ms.every((m) => m.isSynthetic && m.source === 'simulated')).toBe(true);
+    expect(await repo.listCheckIns('a')).toHaveLength(1);
+  });
+});

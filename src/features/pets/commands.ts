@@ -8,7 +8,7 @@ import type { PetCommand, PetSpecies } from '../health/types';
  * measurement, an assessment, an alert, or the pet's wellness state.
  */
 
-export const COMMANDS: PetCommand[] = ['sit', 'stand', 'jump', 'pet', 'play', 'float'];
+export const COMMANDS: PetCommand[] = ['sit', 'stand', 'jump', 'pet', 'play'];
 
 export const COMMAND_KEYS: Record<string, PetCommand> = {
   '1': 'sit',
@@ -16,8 +16,12 @@ export const COMMAND_KEYS: Record<string, PetCommand> = {
   '3': 'jump',
   '4': 'pet',
   '5': 'play',
-  '6': 'float',
 };
+
+/** Button/voice label for a command: the axolotl's "stand" is called Float. */
+export function commandLabel(species: PetSpecies, command: PetCommand): string {
+  return species === 'axolotl' && command === 'stand' ? 'float' : command;
+}
 
 export interface ResolvedAction {
   /** CSS animation class in index.css. */
@@ -34,17 +38,15 @@ const LITERAL: Record<PetCommand, ResolvedAction> = {
   jump: { animation: 'jump', verb: 'jumps', equivalent: false },
   pet: { animation: 'pet', verb: 'enjoys being petted', equivalent: false },
   play: { animation: 'play', verb: 'plays', equivalent: false },
-  float: { animation: 'float', verb: 'hovers in zero-g', equivalent: false },
 };
 
 /** Axolotls don't sit or stand: they drift, bob and wiggle their gills. */
 const AXOLOTL: Record<PetCommand, ResolvedAction> = {
   sit: { animation: 'settle', verb: 'settles gently (axolotl equivalent of sit)', equivalent: true },
-  stand: { animation: 'float', verb: 'drifts upward (axolotl equivalent of stand)', equivalent: true },
+  stand: { animation: 'float', verb: 'floats up in zero-g', equivalent: true },
   jump: { animation: 'bob', verb: 'bobs (axolotl equivalent of jump)', equivalent: true },
   pet: { animation: 'gills', verb: 'wiggles its gills happily', equivalent: false },
   play: { animation: 'play', verb: 'swirls through some bubbles', equivalent: false },
-  float: { animation: 'float', verb: 'floats in zero-g', equivalent: false },
 };
 
 export function resolveCommand(species: PetSpecies, command: PetCommand): ResolvedAction {
