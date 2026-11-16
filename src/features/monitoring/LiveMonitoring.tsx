@@ -4,6 +4,7 @@ import { useSynora } from '../../app/state';
 import { Button, Card, Pill, SourceBadge } from '../../components/ui';
 import { formatDateTime, formatUnit, formatValue, timeAgo } from '../../lib/format';
 import { METRICS } from '../health/metrics';
+import type { Measurement } from '../health/types';
 import { MISSION_DAYS, SCENARIOS, type ScenarioId } from '../simulation/scenarios';
 import { ManualEntryForm } from './ManualEntryForm';
 
@@ -143,12 +144,25 @@ function SimulatedFeed() {
 }
 
 function ManualPanel() {
-  const { measurements, now, lastUpdate } = useSynora();
-  const recent = [...measurements].reverse().slice(0, 6);
+  const { measurements, now, lastUpdate, deleteMeasurement } = useSynora();
+  const [editing, setEditing] = useState<Measurement>();
+  const recent = [...measurements].reverse().filter((m) => m.source === 'manual').slice(0, 10);
+
+  async function onDelete(m: Measurement) {
+    const label = `${METRICS[m.metric].label} ${formatValue(m)} ${formatUnit(m)} (${formatDateTime(m.measuredAt)})`;
+    if (!window.confirm(`Delete ${label}? Other readings and check-ins are not affected.`)) return;
+    await deleteMeasurement(m.id);
+    if (editing?.id === m.id) setEditing(undefined);
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-      <Card title="Manual measurement" actions={<SourceBadge source="manual" />}>
-        <ManualEntryForm />
+      <Card
+        title={editing ? `Correcting ${METRICS[editing.metric].label.toLowerCase()} · ${formatDateTime(editing.measuredAt)}` : 'Manual measurement'}
+        actions={<SourceBadge source="manual" />}
+      >
+        {/* key resets the form when switching between new entry and editing */}
+        <ManualEntryForm key={editing?.id ?? 'new'} editing={editing} onDone={() => setEditing(undefined)} />
       </Card>
       <Card title="Recent manual entries">
         <StatusRow label="Mode">Manual entry</StatusRow>
@@ -158,7 +172,7 @@ function ManualPanel() {
         <ul className="mt-3 divide-y divide-white/5 text-sm">
           {recent.length === 0 && <li className="py-2 text-text-muted">No manual entries yet.</li>}
           {recent.map((m) => (
-            <li key={m.id} className="py-1.5">
+            <li key={m.id} className={`py-1.5 ${editing?.id === m.id ? 'rounded bg-cyan/5 px-2' : ''}`}>
               <div className="flex justify-between gap-2">
                 <span>{METRICS[m.metric].label}</span>
                 <span className="tabular-nums">
@@ -168,8 +182,17 @@ function ManualPanel() {
               <div className="flex flex-wrap gap-1.5 text-[11px] text-text-muted">
                 <span>{formatDateTime(m.measuredAt)}</span>
                 {m.deviceOrMethod && <span>· {m.deviceOrMethod}</span>}
-                {m.original && <span>· entered as {typeof m.original.value === 'number' ? m.original.value : ''} {m.original.unit}</span>}
+                {m.original && typeof m.original.value === 'number' && <span>· entered as {m.original.value} {m.original.unit}</span>}
                 {m.qualityStatus === 'suspect' && <Pill tone="review">Re-measure suggested</Pill>}
+                {m.editedAt && <Pill>edited</Pill>}
+              </div>
+              <div className="mt-0.5 flex gap-3 text-xs">
+                <button className="text-cyan underline" onClick={() => setEditing(m)} aria-label={`Edit ${METRICS[m.metric].label} from ${formatDateTime(m.measuredAt)}`}>
+                  Edit
+                </button>
+                <button className="text-attention underline" onClick={() => onDelete(m)} aria-label={`Delete ${METRICS[m.metric].label} from ${formatDateTime(m.measuredAt)}`}>
+                  Delete
+                </button>
               </div>
             </li>
           ))}

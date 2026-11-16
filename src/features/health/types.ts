@@ -84,6 +84,8 @@ export interface Measurement {
   missionDay?: number;
   /** Radiation: exposure period the dose covers, in hours. */
   exposurePeriodHours?: number;
+  /** Set when a manual entry was corrected after saving (ISO 8601). */
+  editedAt?: string;
 }
 
 /** Un-validated input from any source adapter (form, simulator, future device). */
@@ -123,6 +125,8 @@ export interface CheckIn {
   isSynthetic: boolean;
   scenarioId?: string;
   missionDay?: number;
+  /** Set when the check-in was corrected after saving (ISO 8601). */
+  editedAt?: string;
 }
 
 // ---------------------------------------------------------------------------

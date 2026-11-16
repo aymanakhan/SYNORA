@@ -4,7 +4,7 @@ import type { HealthRepository } from './repository';
 
 interface SynoraDB extends DBSchema {
   profiles: { key: string; value: DemoProfile };
-  measurements: { key: string; value: Measurement; indexes: { byProfile: string } };
+  measurements: { key: string; value: Measurement; indexes: { byProfile: string; byProfileMetricTime: [string, string, string] } };
   checkIns: { key: string; value: CheckIn; indexes: { byProfile: string } };
 }
 
@@ -13,11 +13,17 @@ export class IndexedDbRepository implements HealthRepository {
   private constructor(private db: IDBPDatabase<SynoraDB>) {}
 
   static async open(name = 'synora'): Promise<IndexedDbRepository> {
-    const db = await openDB<SynoraDB>(name, 1, {
-      upgrade(db) {
-        db.createObjectStore('profiles', { keyPath: 'id' });
-        db.createObjectStore('measurements', { keyPath: 'id' }).createIndex('byProfile', 'profileId');
-        db.createObjectStore('checkIns', { keyPath: 'id' }).createIndex('byProfile', 'profileId');
+    const db = await openDB<SynoraDB>(name, 2, {
+      upgrade(db, oldVersion, _newVersion, tx) {
+        if (oldVersion < 1) {
+          db.createObjectStore('profiles', { keyPath: 'id' });
+          db.createObjectStore('measurements', { keyPath: 'id' }).createIndex('byProfile', 'profileId');
+          db.createObjectStore('checkIns', { keyPath: 'id' }).createIndex('byProfile', 'profileId');
+        }
+        if (oldVersion < 2) {
+          // v2: compound index so duplicate checks don't scan every reading.
+          tx.objectStore('measurements').createIndex('byProfileMetricTime', ['profileId', 'metric', 'measuredAt']);
+        }
       },
     });
     return new IndexedDbRepository(db);
@@ -35,6 +41,15 @@ export class IndexedDbRepository implements HealthRepository {
   async addMeasurement(m: Measurement) {
     await this.db.put('measurements', m);
   }
+  getMeasurement(id: string) {
+    return this.db.get('measurements', id);
+  }
+  async deleteMeasurement(id: string) {
+    await this.db.delete('measurements', id);
+  }
+  findMeasurementsAt(profileId: string, metric: string, measuredAt: string) {
+    return this.db.getAllFromIndex('measurements', 'byProfileMetricTime', [profileId, metric, measuredAt]);
+  }
   async listMeasurements(profileId: string, opts: { synthetic?: boolean } = {}) {
     const all = await this.db.getAllFromIndex('measurements', 'byProfile', profileId);
     return all
@@ -43,6 +58,12 @@ export class IndexedDbRepository implements HealthRepository {
   }
   async addCheckIn(c: CheckIn) {
     await this.db.put('checkIns', c);
+  }
+  getCheckIn(id: string) {
+    return this.db.get('checkIns', id);
+  }
+  async deleteCheckIn(id: string) {
+    await this.db.delete('checkIns', id);
   }
   async listCheckIns(profileId: string, opts: { synthetic?: boolean } = {}) {
     const all = await this.db.getAllFromIndex('checkIns', 'byProfile', profileId);

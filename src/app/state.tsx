@@ -10,7 +10,16 @@ import type {
   RawMeasurementInput,
 } from '../features/health/types';
 import { MISSION_DAYS, generateDay, generateWindow, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
-import { ingestCheckIn, ingestMeasurement, type IngestCheckInResult, type IngestResult } from '../services/ingestion/ingest';
+import {
+  deleteManualCheckIn,
+  deleteManualMeasurement,
+  ingestCheckIn,
+  ingestMeasurement,
+  updateCheckIn as updateCheckInRecord,
+  updateMeasurement,
+  type IngestCheckInResult,
+  type IngestResult,
+} from '../services/ingestion/ingest';
 import { IndexedDbRepository } from '../services/storage/indexedDb';
 import { MemoryRepository, type HealthRepository } from '../services/storage/repository';
 
@@ -49,7 +58,12 @@ interface SynoraContext {
   setSpeed: (ms: number) => void;
   lastUpdate?: LastUpdate;
   addManualMeasurement: (raw: Omit<RawMeasurementInput, 'source'>) => Promise<IngestResult>;
+  editManualMeasurement: (id: string, raw: Omit<RawMeasurementInput, 'source'>) => Promise<IngestResult>;
+  deleteMeasurement: (id: string) => Promise<boolean>;
+  /** Saves a manual check-in; a second one on the same day updates that day's entry. */
   submitCheckIn: (raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay'>) => Promise<IngestCheckInResult>;
+  editCheckIn: (id: string, raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay' | 'submittedAt'>) => Promise<IngestCheckInResult>;
+  deleteCheckIn: (id: string) => Promise<boolean>;
   savePet: (species: PetSpecies, name: string) => Promise<void>;
   resetData: (which: 'manual' | 'simulated') => Promise<void>;
 }
@@ -246,32 +260,90 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     [ready, measurements, checkIns, mode, sim.day, realNow],
   );
 
+  /**
+   * After any change to manual data: show manual entries (so the result
+   * visibly updates instead of staying on the simulation) and refresh.
+   */
+  const afterManualChange = useCallback(
+    async (r: HealthRepository, kind: LastUpdate['kind'], label: string) => {
+      const switched = mode !== 'manual';
+      if (switched) setModeState('manual');
+      setLastUpdate({ at: Date.now(), kind, label: switched ? `${label}. Now showing your manual entries.` : label });
+      setRealNow(new Date());
+      await enqueue(() => refresh(r, 'manual'));
+    },
+    [mode, enqueue, refresh],
+  );
+
+
   const addManualMeasurement = useCallback(
     async (raw: Omit<RawMeasurementInput, 'source'>) => {
-      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } as IngestResult;
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestResult;
       const result = await enqueue(() => ingestMeasurement({ ...raw, source: 'manual' }, { profileId: PROFILE_ID }, repo));
-      if (result.status === 'saved') {
-        setLastUpdate({ at: Date.now(), kind: 'measurement', label: 'Manual measurement saved' });
-        setRealNow(new Date());
-        if (mode === 'manual') await enqueue(() => refresh(repo, 'manual'));
-      }
+      if (result.status === 'saved') await afterManualChange(repo, 'measurement', 'Manual measurement saved');
       return result;
     },
-    [repo, mode, enqueue, refresh],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repo, enqueue, afterManualChange],
+  );
+
+  const editManualMeasurement = useCallback(
+    async (id: string, raw: Omit<RawMeasurementInput, 'source'>) => {
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestResult;
+      const result = await enqueue(() => updateMeasurement(id, raw, { profileId: PROFILE_ID }, repo));
+      if (result.status === 'saved') await afterManualChange(repo, 'measurement', 'Measurement corrected');
+      return result;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repo, enqueue, afterManualChange],
+  );
+
+  const deleteMeasurement = useCallback(
+    async (id: string) => {
+      if (!repo) return false;
+      const ok = await enqueue(() => deleteManualMeasurement(id, PROFILE_ID, repo));
+      if (ok) await afterManualChange(repo, 'measurement', 'Measurement deleted');
+      return ok;
+    },
+    [repo, enqueue, afterManualChange],
   );
 
   const submitCheckIn = useCallback(
     async (raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay'>) => {
-      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } as IngestCheckInResult;
-      const result = await enqueue(() => ingestCheckIn({ ...raw, synthetic: false }, { profileId: PROFILE_ID }, repo));
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestCheckInResult;
+      const result = await enqueue(() =>
+        ingestCheckIn({ ...raw, synthetic: false }, { profileId: PROFILE_ID }, repo, {
+          onePerDay: { utcOffsetMinutes: -new Date().getTimezoneOffset() },
+        }),
+      );
       if (result.status === 'saved') {
-        setLastUpdate({ at: Date.now(), kind: 'check-in', label: 'Check-in saved' });
-        setRealNow(new Date());
-        if (mode === 'manual') await enqueue(() => refresh(repo, 'manual'));
+        await afterManualChange(repo, 'check-in', result.replaced ? "Today's check-in updated" : 'Check-in saved');
       }
       return result;
     },
-    [repo, mode, enqueue, refresh],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repo, enqueue, afterManualChange],
+  );
+
+  const editCheckIn = useCallback(
+    async (id: string, raw: Omit<RawCheckInInput, 'synthetic' | 'scenarioId' | 'missionDay' | 'submittedAt'>) => {
+      if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestCheckInResult;
+      const result = await enqueue(() => updateCheckInRecord(id, { ...raw, synthetic: false }, { profileId: PROFILE_ID }, repo));
+      if (result.status === 'saved') await afterManualChange(repo, 'check-in', 'Check-in corrected');
+      return result;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repo, enqueue, afterManualChange],
+  );
+
+  const deleteCheckIn = useCallback(
+    async (id: string) => {
+      if (!repo) return false;
+      const ok = await enqueue(() => deleteManualCheckIn(id, PROFILE_ID, repo));
+      if (ok) await afterManualChange(repo, 'check-in', 'Check-in deleted');
+      return ok;
+    },
+    [repo, enqueue, afterManualChange],
   );
 
   const savePet = useCallback(
@@ -314,7 +386,11 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     setSpeed,
     lastUpdate,
     addManualMeasurement,
+    editManualMeasurement,
+    deleteMeasurement,
     submitCheckIn,
+    editCheckIn,
+    deleteCheckIn,
     savePet,
     resetData,
   };
