@@ -166,6 +166,8 @@ export interface RuleFinding {
   evidenceRefs: string[];
   evidence: EvidenceLevel;
   nextStep: NextStepCategory;
+  /** Simple practical actions (general wellness/measurement steps, not treatment). */
+  guidance?: string[];
 }
 
 /** Wellbeing signals from recent self-reports/check-ins (not clinical findings). */

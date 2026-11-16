@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assess } from '../features/health/assessment';
+import { GUIDANCE } from '../features/health/assessment/guidance';
 import { RULE_DEFINITIONS } from '../features/health/assessment/rules';
 import { METRICS } from '../features/health/metrics';
 import type { CheckIn, Measurement, MeasurementValue, MetricId } from '../features/health/types';
@@ -460,5 +461,32 @@ describe('radiation rules (demonstration-only)', () => {
     expect(rad(r)).toEqual([]);
     expect(r.radiation?.totalMSv).toBe(12);
     expect(r.radiation?.latestDailyRateMSv).toBeUndefined();
+  });
+});
+
+describe('practical guidance on findings', () => {
+  it('every finding carries guidance', () => {
+    const r = run(
+      [m('heartRate', 130), m('bloodPressure', { systolic: 170, diastolic: 105 }), m('spo2', 90), m('bodyTemperature', 39.5), m('bloodGlucose', 40), m('radiationDose', 12, 2, { exposurePeriodHours: 24 })],
+      [checkIn(1, { sleepHours: 3, symptoms: ['nausea'] })],
+    );
+    expect(r.findings.length).toBeGreaterThan(5);
+    for (const f of r.findings) expect(f.guidance?.length, f.ruleId).toBeGreaterThan(0);
+  });
+
+  it('guidance follows the direction of the reading', () => {
+    const high = run([m('heartRate', 125), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    const low = run([m('heartRate', 45), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    expect(high).toMatch(/caffeine|exercise/);
+    expect(low).toMatch(/fit people/);
+    const gHigh = run([m('bloodGlucose', 260), m('heartRate', 70), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    const gLow = run([m('bloodGlucose', 50), m('heartRate', 70), m('spo2', 98)]).findings[0].guidance!.join(' ');
+    expect(gHigh).toMatch(/last ate/);
+    expect(gLow).toMatch(/shaky/);
+  });
+
+  it('never suggests a medication or dose', () => {
+    const all = Object.values(GUIDANCE).flatMap((g) => Object.values(g).flat()).join(' ').toLowerCase();
+    expect(all).not.toMatch(/\b(mg|tablet|pill|aspirin|ibuprofen|paracetamol|acetaminophen|insulin|dose of)\b/);
   });
 });

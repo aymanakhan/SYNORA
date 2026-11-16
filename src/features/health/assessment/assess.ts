@@ -10,6 +10,7 @@ import type {
   RuleFinding,
 } from '../types';
 import { componentValue, computeBaseline } from './baseline';
+import { guidanceFor, type Direction } from './guidance';
 import {
   BASELINE,
   CHECK_IN_FLAG_THRESHOLDS,
@@ -96,7 +97,10 @@ export function assess(input: AssessmentInput): AssessmentResult {
     const status = rangeStatus(rule, v);
     if (!status) continue;
     rangeFlagged.add(rule.metric);
+    const highs = [rule.review.highAtOrAbove, rule.attention.highAtOrAbove].filter((x): x is number => x !== undefined);
+    const direction: Direction = highs.length > 0 && v >= Math.min(...highs) ? 'high' : 'low';
     findings.push({
+      guidance: guidanceFor(rule.id, direction),
       ruleId: rule.id,
       status,
       explanation: `${rule.label} ${fmt(v)} ${rule.unit} is in the demonstration ${status} range.${
@@ -310,6 +314,9 @@ export function assess(input: AssessmentInput): AssessmentResult {
     findings.some((f) => f.evidenceRefs.some((r) => measurements.find((m) => m.id === r)?.isSynthetic)) ||
     (checkInFresh?.isSynthetic ?? false);
   if (basedOnSyntheticData) limitations.push('Includes synthetic (simulated) data — not real astronaut measurements.');
+
+  // Attach practical guidance to every finding that doesn't have it yet.
+  for (const f of findings) f.guidance ??= guidanceFor(f.ruleId);
 
   return {
     status,
