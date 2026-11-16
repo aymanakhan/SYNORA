@@ -33,9 +33,11 @@ No accounts, API keys, or network access are needed for the demo.
    - *Connected Monitoring Device*: honestly says nothing is connected.
    - *Manual Measurement*: enter a heart rate of `400` to see it rejected, then `72`, a blood pressure of `118/76` and a temperature of `98.4 °F` (converted to °C). The dashboard switches to your manual entries.
 5. **Check-In:** log `4` hours of sleep. The result becomes **Review** (short sleep) and the pet becomes concerned.
-6. **Pet:** try the command buttons or keys 1–6. The axolotl shows labelled equivalents (it floats rather than sits), and the status doesn't change.
-7. **Reload the page:** the pet, manual entries and check-ins are still there.
-8. **Trends** and **Summary:** charts with the demonstration thresholds and flagged points, plus a copyable, source-labelled summary.
+6. **Today's routine:** on the dashboard (manual entries), use **Measure now** on a reminder. Complete all six tasks and the pet earns a treat. Mistakes can be fixed with **Edit**/**Delete** in Live Monitoring → Manual and in Check-In history.
+7. **Solar particle event:** in Mission Simulator, choose that scenario and **D96 · Storm peak** for a radiation attention; **D175** shows the cumulative-dose review.
+8. **Pet:** try the command buttons or keys 1–6. The axolotl shows labelled equivalents (it floats rather than sits), and the status doesn't change.
+9. **Reload the page:** the pet, manual entries and check-ins are still there.
+10. **Trends** and **Summary:** charts with the demonstration thresholds and flagged points, plus a copyable, source-labelled summary.
 
 ## Status
 
@@ -50,6 +52,10 @@ No accounts, API keys, or network access are needed for the demo.
 | 180-day mission simulator, 5 scenarios, timeline preview | ✅ |
 | Daily check-in, trends charts, mission summary | ✅ |
 | Clickable body overview (regions coloured by the shared assessment) | ✅ |
+| Radiation dose-rate + cumulative mission dose rules; "Solar particle event" scenario | ✅ |
+| "What you can do now" guidance on every finding | ✅ |
+| Today's routine: reminders, "Measure now" links, pet stars/treats/streak | ✅ |
+| Edit/Delete manual readings and check-ins; one check-in per day | ✅ |
 | CI: tests + build on every pull request | ✅ |
 | "Why it matters in space" explanations citing NASA HRP + CSA pages; how-to tips | ✅ |
 | Offline reload via service worker (production build; tested with network off) | ✅ |
