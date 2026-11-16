@@ -1,4 +1,5 @@
 import type { MetricId, RuleDefinition } from '../types';
+import { formatIn, type DisplayUnits } from '../units';
 
 /**
  * Assessment rule catalog.
@@ -284,4 +285,36 @@ export const RULE_DEFINITIONS: RuleDefinition[] = [
 
 export function getRuleDefinition(id: string): RuleDefinition | undefined {
   return RULE_DEFINITIONS.find((r) => r.id === id);
+}
+
+/**
+ * Rule description written in the user's display units (e.g. °F). Falls back
+ * to the static description for rules without unit-bearing thresholds.
+ */
+export function ruleDescription(id: string, units?: DisplayUnits): string {
+  const def = getRuleDefinition(id);
+  if (!def) return '';
+  const range = RANGE_RULES.find((r) => r.id === id);
+  if (range) {
+    const f = (v: number) => formatIn(range.metric, v, units);
+    const parts: string[] = [];
+    const { review: rv, attention: at } = range;
+    if (rv.highAtOrAbove !== undefined) parts.push(`review at ≥ ${f(rv.highAtOrAbove)}`);
+    if (rv.lowBelow !== undefined) parts.push(`review below ${f(rv.lowBelow)}`);
+    if (at.highAtOrAbove !== undefined) parts.push(`attention at ≥ ${f(at.highAtOrAbove)}`);
+    if (at.lowBelow !== undefined) parts.push(`attention below ${f(at.lowBelow)}`);
+    return `${range.label}: ${parts.join('; ')}. Demonstration-only thresholds.`;
+  }
+  const h = (v: number) => formatIn('sleepDuration', v, units);
+  const r = (v: number) => formatIn('radiationDose', v, units);
+  switch (id) {
+    case 'R-SLEEP-SHORT':
+      return `Review if the latest night is under ${h(SLEEP_RULE.singleNightBelowHours)}, or each of the last ${SLEEP_RULE.consecutiveNights} consecutive nights is under ${h(SLEEP_RULE.consecutiveBelowHours)} (one entry per night; a skipped night breaks the streak). Demonstration-only thresholds.`;
+    case 'R-RAD-DOSE-RATE':
+      return `Latest dosimeter reading normalised to 24 h: review at ≥ ${r(RADIATION_RULE.dailyRate.reviewAtOrAbove)}/day, attention at ≥ ${r(RADIATION_RULE.dailyRate.attentionAtOrAbove)}/day. Illustrative values, not NASA limits.`;
+    case 'R-RAD-CUMULATIVE':
+      return `Sum of all recorded doses: review at ≥ ${r(RADIATION_RULE.cumulative.reviewAtOrAbove)}, attention at ≥ ${r(RADIATION_RULE.cumulative.attentionAtOrAbove)}. Unrecorded periods are not filled in. Illustrative values, not NASA limits.`;
+    default:
+      return def.description;
+  }
 }

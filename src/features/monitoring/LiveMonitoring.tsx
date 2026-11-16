@@ -80,7 +80,7 @@ function StatusRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 function SimulatedFeed() {
-  const { sim, setScenario, setDay, setPlaying, setSpeed, measurements, now, lastUpdate } = useSynora();
+  const { sim, setScenario, setDay, setPlaying, setSpeed, measurements, now, lastUpdate, displayUnits } = useSynora();
   const today = measurements.filter((m) => m.missionDay === sim.day);
   const last = measurements[measurements.length - 1];
 
@@ -138,8 +138,8 @@ function SimulatedFeed() {
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
                 <span>{METRICS[m.metric].label}</span>
                 <span className="flex items-center gap-2">
-                  <strong className="tabular-nums">{formatValue(m)}</strong>
-                  <span className="text-text-muted">{formatUnit(m)}</span>
+                  <strong className="tabular-nums">{formatValue(m, displayUnits)}</strong>
+                  <span className="text-text-muted">{formatUnit(m, displayUnits)}</span>
                   <SourceBadge source={m.source} />
                 </span>
               </li>
@@ -152,12 +152,12 @@ function SimulatedFeed() {
 }
 
 function ManualPanel({ initialMetric }: { initialMetric?: MetricId }) {
-  const { measurements, now, lastUpdate, deleteMeasurement } = useSynora();
+  const { measurements, now, lastUpdate, deleteMeasurement, displayUnits } = useSynora();
   const [editing, setEditing] = useState<Measurement>();
   const recent = [...measurements].reverse().filter((m) => m.source === 'manual').slice(0, 10);
 
   async function onDelete(m: Measurement) {
-    const label = `${METRICS[m.metric].label} ${formatValue(m)} ${formatUnit(m)} (${formatDateTime(m.measuredAt)})`;
+    const label = `${METRICS[m.metric].label} ${formatValue(m, displayUnits)} ${formatUnit(m, displayUnits)} (${formatDateTime(m.measuredAt)})`;
     if (!window.confirm(`Delete ${label}? Other readings and check-ins are not affected.`)) return;
     await deleteMeasurement(m.id);
     if (editing?.id === m.id) setEditing(undefined);
@@ -184,7 +184,7 @@ function ManualPanel({ initialMetric }: { initialMetric?: MetricId }) {
               <div className="flex justify-between gap-2">
                 <span>{METRICS[m.metric].label}</span>
                 <span className="tabular-nums">
-                  <strong>{formatValue(m)}</strong> <span className="text-text-muted">{formatUnit(m)}</span>
+                  <strong>{formatValue(m, displayUnits)}</strong> <span className="text-text-muted">{formatUnit(m, displayUnits)}</span>
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5 text-[11px] text-text-muted">

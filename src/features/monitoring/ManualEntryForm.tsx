@@ -4,7 +4,7 @@ import { LearnMore } from '../../components/LearnMore';
 import { Button } from '../../components/ui';
 import { formatUnit, formatValue } from '../../lib/format';
 import { BLOOD_PRESSURE_PLAUSIBLE, METRICS } from '../health/metrics';
-import { rangeInUnit } from '../../services/ingestion/units';
+import { displayUnit, rangeInUnit } from '../health/units';
 import type { Measurement, MetricId } from '../health/types';
 import type { ValidationError } from '../../services/ingestion/validate';
 
@@ -38,14 +38,14 @@ export function ManualEntryForm({
   initialMetric,
   onDone,
 }: { editing?: Measurement; initialMetric?: MetricId; onDone?: () => void } = {}) {
-  const { addManualMeasurement, editManualMeasurement } = useSynora();
+  const { addManualMeasurement, editManualMeasurement, displayUnits } = useSynora();
   const uid = useId();
   const fid = (k: string) => `${uid}-${k}`;
   const orig = editing?.original;
   const shown = orig ?? (editing ? { value: editing.value, unit: editing.unit } : undefined);
   const [metric, setMetric] = useState<MetricId>(editing?.metric ?? initialMetric ?? 'heartRate');
   const def = METRICS[metric];
-  const [unit, setUnit] = useState(shown?.unit ?? def.canonicalUnit);
+  const [unit, setUnit] = useState(shown?.unit ?? displayUnit(def.id, displayUnits));
   const [value, setValue] = useState(shown && typeof shown.value === 'number' ? String(shown.value) : '');
   const [systolic, setSystolic] = useState(shown && typeof shown.value === 'object' ? String(shown.value.systolic) : '');
   const [diastolic, setDiastolic] = useState(shown && typeof shown.value === 'object' ? String(shown.value.diastolic) : '');
@@ -62,7 +62,7 @@ export function ManualEntryForm({
   const isScale = def.integer === true;
   const changeMetric = (m: MetricId) => {
     setMetric(m);
-    setUnit(METRICS[m].canonicalUnit);
+    setUnit(displayUnit(m, displayUnits));
     setMethod(METRICS[m].typicalMethod);
     setValue('');
     setErrors([]);
@@ -99,7 +99,7 @@ export function ManualEntryForm({
     setSaved(
       result.status === 'duplicate'
         ? 'An identical reading with the same time is already saved, so it was not added twice.'
-        : `Saved ${def.label}: ${formatValue(m)} ${formatUnit(m)} (manual entry). The monitoring result has been updated.`,
+        : `Saved ${def.label}: ${formatValue(m, { ...displayUnits, [m.metric]: unit })} ${formatUnit(m, { ...displayUnits, [m.metric]: unit })} (manual entry). The monitoring result has been updated.`,
     );
     setValue('');
     setSystolic('');

@@ -278,8 +278,8 @@ export function radiationHistory(id: ScenarioId, beforeDay: number): RawMeasurem
   return out;
 }
 
-/** Days [max(1, endDay - windowDays + 1) … endDay], oldest first. */
-export function generateWindow(id: ScenarioId, endDay: number, windowDays = 14): SimulatedDay[] {
+/** Days [max(1, endDay - windowDays + 1) … endDay], oldest first. 30 days so the 30-day trend view has data. */
+export function generateWindow(id: ScenarioId, endDay: number, windowDays = 30): SimulatedDay[] {
   const from = Math.max(1, endDay - windowDays + 1);
   const days: SimulatedDay[] = [];
   for (let d = from; d <= endDay; d++) days.push(generateDay(id, d));

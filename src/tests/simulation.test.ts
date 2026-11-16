@@ -44,7 +44,7 @@ describe('mission simulator', () => {
 
   it('generates a window that starts at day 1 when needed', () => {
     expect(generateWindow('stable', 3).map((d) => d.day)).toEqual([1, 2, 3]);
-    expect(generateWindow('stable', 50)).toHaveLength(14);
+    expect(generateWindow('stable', 50)).toHaveLength(30);
   });
 
   it.each(SCENARIOS.map((s) => s.id))('every day of "%s" passes validation', (id) => {

@@ -3,6 +3,7 @@ import { useSynora } from '../../app/state';
 import { LearnMore } from '../../components/LearnMore';
 import { Card, SourceBadge, StatusBadge } from '../../components/ui';
 import { timeAgo } from '../../lib/format';
+import { formatIn } from '../health/units';
 import { statusStyle } from '../../theme/tokens';
 import { useLatestReadings } from '../dashboard/useLatestReadings';
 import { SOURCES } from '../health/knowledge';
@@ -17,7 +18,7 @@ type RegionStatus = AssessmentStatus | 'not-tracked';
  * flags as the metric cards. No region has its own medical logic.
  */
 export function BodyMap() {
-  const { now, assessment } = useSynora();
+  const { now, assessment, displayUnits } = useSynora();
   const { latest, flagFor, isStale } = useLatestReadings();
   const [selected, setSelected] = useState<RegionId>('heart');
 
@@ -136,8 +137,8 @@ export function BodyMap() {
 
           {sel.id === 'radiation' && assessment?.radiation && (
             <p className="mt-2 text-sm text-text-secondary">
-              Recorded total: <strong>{assessment.radiation.totalMSv.toFixed(1)} mSv</strong> from {assessment.radiation.readings} dosimeter readings
-              {assessment.radiation.latestDailyRateMSv !== undefined && <> · latest ≈ {assessment.radiation.latestDailyRateMSv.toFixed(2)} mSv/day</>}.
+              Recorded total: <strong>{formatIn('radiationDose', assessment.radiation.totalMSv, displayUnits)}</strong> from {assessment.radiation.readings} dosimeter readings
+              {assessment.radiation.latestDailyRateMSv !== undefined && <> · latest ≈ {formatIn('radiationDose', assessment.radiation.latestDailyRateMSv, displayUnits)}/day</>}.
             </p>
           )}
           {sel.notTracked && <p className="mt-3 rounded border border-white/10 bg-panel p-2 text-xs text-text-secondary">{sel.notTracked}</p>}

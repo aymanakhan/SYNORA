@@ -9,6 +9,7 @@ import type {
   NextStepCategory,
   RuleFinding,
 } from '../types';
+import { formatIn, type DisplayUnits } from '../units';
 import { componentValue, computeBaseline } from './baseline';
 import { guidanceFor, type Direction } from './guidance';
 import {
@@ -37,6 +38,11 @@ export interface AssessmentInput {
    * passes 0 because the mission clock is UTC.
    */
   utcOffsetMinutes?: number;
+  /**
+   * Units to use in explanation text (e.g. °F, mmol/L). Rules always run on
+   * canonical values; this only changes how numbers are written.
+   */
+  displayUnits?: DisplayUnits;
 }
 
 /**
@@ -51,6 +57,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const nowMs = now.getTime();
   const offsetMin = input.utcOffsetMinutes ?? -now.getTimezoneOffset();
   const dayOf = (t: number) => Math.floor((t + offsetMin * 60_000) / DAY_MS);
+  const show = (metric: MetricId, v: number) => formatIn(metric, v, input.displayUnits);
 
   // Dedupe by id, ignore future-dated readings, sort by measurement time
   // (handles out-of-order arrival).
@@ -103,7 +110,9 @@ export function assess(input: AssessmentInput): AssessmentResult {
       guidance: guidanceFor(rule.id, direction),
       ruleId: rule.id,
       status,
-      explanation: `${rule.label} ${fmt(v)} ${rule.unit} is in the demonstration ${status} range.${
+      explanation: `${rule.label} ${show(rule.metric, v)} is in the demonstration ${status} range (${status} ${
+        direction === 'high' ? `at ≥ ${show(rule.metric, rule[status].highAtOrAbove!)}` : `below ${show(rule.metric, rule[status].lowBelow!)}`
+      }).${
         m.qualityStatus === 'suspect' ? ' This reading was flagged as possibly inaccurate.' : ''
       }`,
       evidenceRefs: [m.id],
@@ -150,9 +159,10 @@ export function assess(input: AssessmentInput): AssessmentResult {
       findings.push({
         ruleId: 'R-BASELINE-DEVIATION',
         status: 'review',
-        explanation: `${cfg.label} ${fmt(v)} ${cfg.unit} is ${z > 0 ? 'above' : 'below'} this profile's usual ${fmt(
+        explanation: `${cfg.label} ${show(cfg.metric, v)} is ${z > 0 ? 'above' : 'below'} this profile's usual ${show(
+          cfg.metric,
           b.baseline.mean,
-        )} ${cfg.unit} (based on ${b.baseline.n} readings).`,
+        )} (based on ${b.baseline.n} readings).`,
         evidenceRefs: [m.id],
         evidence: 'demonstration-only',
         nextStep: 'verify-measurement',
@@ -187,9 +197,12 @@ export function assess(input: AssessmentInput): AssessmentResult {
         findings.push({
           ruleId: 'R-RAD-DOSE-RATE',
           status: st,
-          explanation: `Latest dosimeter reading ${fmt3(lastFresh.value as number)} mSv${
+          explanation: `Latest dosimeter reading ${show('radiationDose', lastFresh.value as number)}${
             lastFresh.exposurePeriodHours ? ` over ${fmt(lastFresh.exposurePeriodHours)} h` : ' (period not stated)'
-          } ≈ ${fmt3(rate)} mSv per day, in the demonstration ${st} range.`,
+          } ≈ ${show('radiationDose', rate)} per day, in the demonstration ${st} range (${st} at ≥ ${show(
+            'radiationDose',
+            st === 'attention' ? R.attentionAtOrAbove : R.reviewAtOrAbove,
+          )} per day).`,
           evidenceRefs: [lastFresh.id],
           evidence: 'demonstration-only',
           nextStep: st === 'attention' ? 'consult-flight-surgeon' : 'verify-measurement',
@@ -202,7 +215,10 @@ export function assess(input: AssessmentInput): AssessmentResult {
       findings.push({
         ruleId: 'R-RAD-CUMULATIVE',
         status: cst,
-        explanation: `Recorded radiation dose adds up to ${fmt(total)} mSv across ${radReadings.length} readings, in the demonstration ${cst} range. Periods without a reading are not included.`,
+        explanation: `Recorded radiation dose adds up to ${show('radiationDose', total)} across ${radReadings.length} readings, in the demonstration ${cst} range (${cst} at ≥ ${show(
+          'radiationDose',
+          cst === 'attention' ? C.attentionAtOrAbove : C.reviewAtOrAbove,
+        )}). Periods without a reading are not included.`,
         evidenceRefs: [last.id],
         evidence: 'demonstration-only',
         nextStep: cst === 'attention' ? 'consult-flight-surgeon' : 'review-guidance',
@@ -217,7 +233,7 @@ export function assess(input: AssessmentInput): AssessmentResult {
   const energy = selfReportSeries('energy', byMetric, checkIns);
   const sleepQuality = selfReportSeries('sleepQuality', byMetric, checkIns);
 
-  const sleepFinding = evaluateSleep(sleep, nowMs, dayOf);
+  const sleepFinding = evaluateSleep(sleep, nowMs, dayOf, (h) => show('sleepDuration', h));
   if (sleepFinding) findings.push(sleepFinding);
 
   const stressRecent = lastConsecutiveDays(stress, SUSTAINED_SELF_REPORT_RULE.count, nowMs, dayOf);
@@ -406,7 +422,7 @@ function lastConsecutiveDays(series: Point[], n: number, nowMs: number, dayOf: D
   return lastN;
 }
 
-function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf): RuleFinding | undefined {
+function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf, showH: (h: number) => string): RuleFinding | undefined {
   const latest = sleep[sleep.length - 1];
   if (!latest || nowMs - latest.at > FRESHNESS_MS.selfReport) return undefined;
   const recent = lastConsecutiveDays(sleep, SLEEP_RULE.consecutiveNights, nowMs, dayOf);
@@ -414,9 +430,9 @@ function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf): RuleFinding
     return {
       ruleId: 'R-SLEEP-SHORT',
       status: 'review',
-      explanation: `Sleep under ${SLEEP_RULE.consecutiveBelowHours} h on each of the last ${recent.length} consecutive nights (${recent
-        .map((p) => fmt(p.value))
-        .join(', ')} h).`,
+      explanation: `Sleep under ${showH(SLEEP_RULE.consecutiveBelowHours)} on each of the last ${recent.length} consecutive nights (${recent
+        .map((p) => showH(p.value))
+        .join(', ')}).`,
       evidenceRefs: recent.map((p) => p.ref),
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
@@ -426,7 +442,7 @@ function evaluateSleep(sleep: Point[], nowMs: number, dayOf: DayOf): RuleFinding
     return {
       ruleId: 'R-SLEEP-SHORT',
       status: 'review',
-      explanation: `Last night's sleep was ${fmt(latest.value)} h, under ${SLEEP_RULE.singleNightBelowHours} h.`,
+      explanation: `Last night's sleep was ${showH(latest.value)}, under ${showH(SLEEP_RULE.singleNightBelowHours)}.`,
       evidenceRefs: [latest.ref],
       evidence: 'demonstration-only',
       nextStep: 'review-guidance',
@@ -462,10 +478,6 @@ function summarize(status: AssessmentStatus, findings: RuleFinding[], freshCore:
         status === 'attention' ? 'human medical review' : 'review'
       }. This is a monitoring flag, not a diagnosis.`;
   }
-}
-
-function fmt3(n: number): string {
-  return Number(n.toFixed(3)).toString();
 }
 
 function fmt(n: number): string {

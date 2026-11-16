@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSynora } from '../../app/state';
 import { formatUnit, formatValue } from '../../lib/format';
+import { displayUnit, formatNumberIn } from '../health/units';
 import { FRESHNESS_MS, getRuleDefinition } from '../health/assessment';
 import { METRICS } from '../health/metrics';
 import type { AssessmentStatus, Measurement, MetricId } from '../health/types';
@@ -25,15 +26,15 @@ export interface Latest {
 
 /** Latest reading per metric (measurements + check-ins) and per-metric flags from the shared assessment. */
 export function useLatestReadings() {
-  const { measurements, checkIns, assessment, now } = useSynora();
+  const { measurements, checkIns, assessment, now, displayUnits } = useSynora();
 
   const latest = useMemo(() => {
     const out = new Map<MetricId, Latest>();
     for (const m of measurements) {
       if (Date.parse(m.measuredAt) > now.getTime()) continue;
       out.set(m.metric, {
-        value: formatValue(m),
-        unit: formatUnit(m),
+        value: formatValue(m, displayUnits),
+        unit: formatUnit(m, displayUnits),
         at: m.measuredAt,
         source: m.source,
         ref: m.id,
@@ -51,8 +52,8 @@ export function useLatestReadings() {
         const prev = out.get(metric);
         if (prev && prev.at >= c.submittedAt) continue;
         out.set(metric, {
-          value: field === 'sleepHours' ? v.toFixed(1) : String(v),
-          unit: field === 'sleepHours' ? 'h' : '/ 5',
+          value: field === 'sleepHours' ? formatNumberIn('sleepDuration', v, displayUnits) : String(v),
+          unit: field === 'sleepHours' ? displayUnit('sleepDuration', displayUnits) : '/ 5',
           at: c.submittedAt,
           source: c.isSynthetic ? 'simulated' : 'manual',
           ref: c.id,
@@ -63,7 +64,7 @@ export function useLatestReadings() {
       }
     }
     return out;
-  }, [measurements, checkIns, now]);
+  }, [measurements, checkIns, now, displayUnits]);
 
   /**
    * A card is highlighted only when a finding is about THAT metric. A check-in

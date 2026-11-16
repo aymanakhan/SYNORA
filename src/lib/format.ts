@@ -1,16 +1,16 @@
-import { METRICS } from '../features/health/metrics';
+import { displayUnit, formatNumberIn, type DisplayUnits } from '../features/health/units';
 import type { Measurement, MeasurementSource, NextStepCategory } from '../features/health/types';
 
-export function formatValue(m: Pick<Measurement, 'metric' | 'value'>): string {
+/** Value in the user's display unit (pass `units`), e.g. "98.6" for °F. */
+export function formatValue(m: Pick<Measurement, 'metric' | 'value'>, units?: DisplayUnits): string {
   const v = m.value;
   if (typeof v === 'object') return `${v.systolic}/${v.diastolic}`;
-  if (m.metric === 'bodyTemperature' || m.metric === 'sleepDuration') return v.toFixed(1);
-  if (m.metric === 'radiationDose') return v.toFixed(3);
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return formatNumberIn(m.metric, v, units);
 }
 
-export function formatUnit(m: Pick<Measurement, 'metric'>): string {
-  return METRICS[m.metric].canonicalUnit.replace('scale 1–5', '/ 5');
+/** Unit label matching formatValue, e.g. "°F". */
+export function formatUnit(m: Pick<Measurement, 'metric'>, units?: DisplayUnits): string {
+  return displayUnit(m.metric, units).replace('scale 1–5', '/ 5');
 }
 
 export function timeAgo(iso: string, now: Date): string {

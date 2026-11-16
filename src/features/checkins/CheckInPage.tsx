@@ -3,6 +3,7 @@ import { useSynora } from '../../app/state';
 import { Button, Card, Pill, SourceBadge } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 import type { CheckIn } from '../health/types';
+import { formatIn } from '../health/units';
 import type { CheckInError } from '../../services/ingestion/validateCheckIn';
 import { DataContextBanner } from '../dashboard/DataContextBanner';
 
@@ -38,7 +39,7 @@ function fromCheckIn(c: CheckIn): FormState {
 const sameLocalDay = (a: string, b: Date) => new Date(a).toDateString() === b.toDateString();
 
 export function CheckInPage() {
-  const { mode, submitCheckIn, editCheckIn, deleteCheckIn, checkIns } = useSynora();
+  const { mode, submitCheckIn, editCheckIn, deleteCheckIn, checkIns, displayUnits } = useSynora();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [editing, setEditing] = useState<CheckIn>();
   const [errors, setErrors] = useState<CheckInError[]>([]);
@@ -187,7 +188,7 @@ export function CheckInPage() {
                   </div>
                   <p className="text-xs text-text-muted">
                     {[
-                      c.sleepHours !== undefined && `sleep ${c.sleepHours} h`,
+                      c.sleepHours !== undefined && `sleep ${formatIn('sleepDuration', c.sleepHours, displayUnits)}`,
                       c.sleepQuality && `quality ${c.sleepQuality}/5`,
                       c.mood && `mood ${c.mood}/5`,
                       c.stress && `stress ${c.stress}/5`,

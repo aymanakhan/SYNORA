@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assess } from '../features/health/assessment';
+import { METRICS, isMetricId } from '../features/health/metrics';
+import { UNIT_CHOICE_METRICS, canonicalizeUnitSpelling, type DisplayUnits } from '../features/health/units';
 import type {
   AssessmentResult,
   CheckIn,
   DemoProfile,
   Measurement,
+  MetricId,
   PetSpecies,
   RawCheckInInput,
   RawMeasurementInput,
@@ -40,8 +43,22 @@ export interface LastUpdate {
   label: string;
 }
 
+export type StartupIssue =
+  | { kind: 'blocked' }
+  | { kind: 'slow' }
+  | { kind: 'error'; message: string };
+
 interface SynoraContext {
   ready: boolean;
+  /** Why the app hasn't finished loading, if something is wrong. */
+  startupIssue?: StartupIssue;
+  /** Another tab opened a newer version; this tab must reload to keep saving. */
+  replacedByNewerVersion: boolean;
+  continueWithoutSaving: () => void;
+  resetLocalData: () => Promise<void>;
+  /** Preferred display unit per metric (°F, mmol/L, µSv, min…). */
+  displayUnits: DisplayUnits;
+  setDisplayUnit: (metric: MetricId, unit: string) => void;
   storageWarning?: string;
   profile?: DemoProfile;
   mode: DataMode;
@@ -72,6 +89,15 @@ const Ctx = createContext<SynoraContext | null>(null);
 
 const PROFILE_ID = 'demo-astronaut';
 const PREFS_KEY = 'synora.prefs.v1';
+const UNITS_KEY = 'synora.units.v1';
+
+function loadUnits(): DisplayUnits {
+  try {
+    return JSON.parse(localStorage.getItem(UNITS_KEY) ?? '{}') as DisplayUnits;
+  } catch {
+    return {};
+  }
+}
 
 interface Prefs {
   mode: DataMode;
@@ -106,6 +132,22 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   const initial = useMemo(loadPrefs, []);
   const [repo, setRepo] = useState<HealthRepository>();
   const [storageWarning, setStorageWarning] = useState<string>();
+  const [startupIssue, setStartupIssue] = useState<StartupIssue>();
+  const [displayUnits, setDisplayUnits] = useState<DisplayUnits>(loadUnits);
+  const setDisplayUnit = useCallback((metric: MetricId, unit: string) => {
+    if (!UNIT_CHOICE_METRICS.includes(metric) || !METRICS[metric].acceptedUnits.includes(unit)) return;
+    setDisplayUnits((u) => {
+      if (u[metric] === unit) return u;
+      const next = { ...u, [metric]: unit };
+      try {
+        localStorage.setItem(UNITS_KEY, JSON.stringify(next));
+      } catch {
+        /* not remembered */
+      }
+      return next;
+    });
+  }, []);
+  const [replacedByNewerVersion, setReplaced] = useState(false);
   const [profile, setProfile] = useState<DemoProfile>();
   const [mode, setModeState] = useState<DataMode>(initial.mode);
   const [sim, setSim] = useState<SimState>({ ...initial.sim, playing: false });
@@ -131,19 +173,23 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     (async () => {
       let r: HealthRepository;
       try {
-        r = await IndexedDbRepository.open();
+        r = await IndexedDbRepository.open('synora', {
+          onBlocked: () => !cancelled && setStartupIssue({ kind: 'blocked' }),
+          onReplaced: () => setReplaced(true),
+        });
+        if (!cancelled) setStartupIssue(undefined);
       } catch {
         r = new MemoryRepository();
         setStorageWarning('Browser storage is unavailable, so data will not be kept after reload.');
       }
-      let p = await r.getProfile(PROFILE_ID);
-      if (!p) {
-        p = { id: PROFILE_ID, displayName: 'Demo Astronaut (fictional)', kind: 'demo', createdAt: new Date().toISOString() };
-        await r.saveProfile(p);
-      }
-      if (!cancelled) {
-        setRepo(r);
-        setProfile(p);
+      try {
+        const p = await ensureProfile(r);
+        if (!cancelled) {
+          setRepo(r);
+          setProfile(p);
+        }
+      } catch (e) {
+        if (!cancelled) setStartupIssue({ kind: 'error', message: (e as Error)?.message ?? String(e) });
       }
     })();
     return () => {
@@ -199,13 +245,51 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!repo) return;
     (async () => {
-      // Always rebuild the simulated window on startup so it matches the saved scenario/day.
-      await loadSimulation(repo, sim.scenarioId, sim.day);
-      await refresh(repo, mode);
-      setReady(true);
+      try {
+        // Always rebuild the simulated window on startup so it matches the saved scenario/day.
+        await loadSimulation(repo, sim.scenarioId, sim.day);
+        await refresh(repo, mode);
+        setStartupIssue(undefined);
+        setReady(true);
+      } catch (e) {
+        setStartupIssue({ kind: 'error', message: (e as Error)?.message ?? String(e) });
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
+
+  // If loading takes unusually long without a known cause, say so.
+  useEffect(() => {
+    if (ready) return;
+    const t = setTimeout(() => setStartupIssue((i) => i ?? { kind: 'slow' }), 8000);
+    return () => clearTimeout(t);
+  }, [ready]);
+
+  /** Escape hatch: run from memory for this visit (nothing is saved). */
+  const continueWithoutSaving = useCallback(() => {
+    const r = new MemoryRepository();
+    setStorageWarning('Running without saving: changes in this visit will be lost when you reload.');
+    setStartupIssue(undefined);
+    loadedSim.current = undefined;
+    void ensureProfile(r).then((p) => {
+      setProfile(p);
+      setRepo(r);
+    });
+  }, []);
+
+  /** Delete this browser's SYNORA demo data and reload. */
+  const resetLocalData = useCallback(async () => {
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase('synora');
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    });
+    try {
+      localStorage.removeItem(PREFS_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  }, []);
 
   const setMode = useCallback(
     (m: DataMode) => {
@@ -258,10 +342,13 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   const now = mode === 'simulated' ? simulatedNow(sim.day) : realNow;
 
   const assessment = useMemo(
-    () => (ready ? assess({ measurements, checkIns, now, utcOffsetMinutes: mode === 'simulated' ? 0 : undefined }) : undefined),
+    () =>
+      ready
+        ? assess({ measurements, checkIns, now, utcOffsetMinutes: mode === 'simulated' ? 0 : undefined, displayUnits })
+        : undefined,
     // `now` is derived from these; avoid re-running on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, measurements, checkIns, mode, sim.day, realNow],
+    [ready, measurements, checkIns, mode, sim.day, realNow, displayUnits],
   );
 
   /**
@@ -280,11 +367,23 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
   );
 
 
+  /** The unit someone enters with becomes their display unit for that measurement. */
+  const rememberUnit = useCallback(
+    (raw: Omit<RawMeasurementInput, 'source'>) => {
+      const spelled = canonicalizeUnitSpelling(raw.unit);
+      if (spelled && isMetricId(raw.metric)) setDisplayUnit(raw.metric, spelled);
+    },
+    [setDisplayUnit],
+  );
+
   const addManualMeasurement = useCallback(
     async (raw: Omit<RawMeasurementInput, 'source'>) => {
       if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestResult;
       const result = await enqueue(() => ingestMeasurement({ ...raw, source: 'manual' }, { profileId: PROFILE_ID }, repo));
-      if (result.status === 'saved') await afterManualChange(repo, 'measurement', 'Manual measurement saved');
+      if (result.status === 'saved') {
+        rememberUnit(raw);
+        await afterManualChange(repo, 'measurement', 'Manual measurement saved');
+      }
       return result;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,7 +394,10 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     async (id: string, raw: Omit<RawMeasurementInput, 'source'>) => {
       if (!repo) return { status: 'rejected', errors: [{ field: 'profileId', message: 'Storage not ready.' }] } satisfies IngestResult;
       const result = await enqueue(() => updateMeasurement(id, raw, { profileId: PROFILE_ID }, repo));
-      if (result.status === 'saved') await afterManualChange(repo, 'measurement', 'Measurement corrected');
+      if (result.status === 'saved') {
+        rememberUnit(raw);
+        await afterManualChange(repo, 'measurement', 'Measurement corrected');
+      }
       return result;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -375,6 +477,12 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
 
   const value: SynoraContext = {
     ready,
+    startupIssue,
+    replacedByNewerVersion,
+    continueWithoutSaving,
+    resetLocalData,
+    displayUnits,
+    setDisplayUnit,
     storageWarning,
     profile,
     mode,
@@ -399,6 +507,15 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
     resetData,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+async function ensureProfile(r: HealthRepository): Promise<DemoProfile> {
+  let p = await r.getProfile(PROFILE_ID);
+  if (!p) {
+    p = { id: PROFILE_ID, displayName: 'Demo Astronaut (fictional)', kind: 'demo', createdAt: new Date().toISOString() };
+    await r.saveProfile(p);
+  }
+  return p;
 }
 
 export function defaultPetName(species: PetSpecies): string {
