@@ -218,8 +218,11 @@ export type PetSpecies = 'cat' | 'dog' | 'axolotl';
 /** Derived ONLY from AssessmentResult + check-in flags. */
 export type PetWellness = 'happy' | 'tired' | 'concerned' | 'unknown';
 
-/** User-triggered commands. Never affect health state or readings. */
-export type PetCommand = 'sit' | 'stand' | 'jump' | 'pet' | 'play' | 'float';
+/**
+ * User-triggered commands. Never affect health state or readings.
+ * (No separate "float": for the axolotl, `stand` is shown and labelled as Float.)
+ */
+export type PetCommand = 'sit' | 'stand' | 'jump' | 'pet' | 'play';
 
 /** Temporary animation state produced by a command. */
 export type PetAction = 'idle' | PetCommand;

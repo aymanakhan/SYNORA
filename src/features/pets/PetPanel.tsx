@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSynora } from '../../app/state';
 import { Button, StatusBadge } from '../../components/ui';
 import type { PetCommand } from '../health/types';
-import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, resolveCommand, type ResolvedAction } from './commands';
+import { ACTION_DURATION_MS, COMMANDS, COMMAND_KEYS, acceptCommand, commandLabel, resolveCommand, type ResolvedAction } from './commands';
 import { GestureControl } from '../pet-input/GestureControl';
 import { VoiceControl } from '../pet-input/VoiceControl';
 import { PetSprite } from './PetSprite';
@@ -65,7 +65,7 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
     }, 3000);
   }, [routine.complete, mode, species]);
 
-  // Keyboard shortcuts 1–6 (ignored while typing in a form field).
+  // Keyboard shortcuts 1–5 (ignored while typing in a form field).
   useEffect(() => {
     if (compact) return;
     const onKey = (e: KeyboardEvent) => {
@@ -123,12 +123,12 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
           <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Pet commands">
             {COMMANDS.map((c, i) => (
               <Button key={c} variant="pixel" onClick={() => dispatch(c)} title={`Shortcut: ${i + 1}`}>
-                {c}
+                {commandLabel(species, c)}
               </Button>
             ))}
           </div>
           <p className="min-h-5 text-xs text-text-muted" aria-live="polite">
-            {action ? `${name} ${action.resolved.verb}.` : 'Tap a command or press keys 1–6.'}
+            {action ? `${name} ${action.resolved.verb}.` : 'Tap a command or press keys 1–5.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-text-muted">
             <button
@@ -153,8 +153,8 @@ export function PetPanel({ compact = false, withGestures = false }: { compact?: 
             </label>
           </div>
           <p className="text-[11px] text-text-muted">Commands are just for fun. They never change your readings or status.</p>
-          {withGestures && <GestureControl onCommand={(c) => dispatch(c)} />}
-          {withGestures && <VoiceControl onCommand={(c) => dispatch(c)} />}
+          {withGestures && <GestureControl species={species} onCommand={(c) => dispatch(c)} />}
+          {withGestures && <VoiceControl species={species} onCommand={(c) => dispatch(c)} />}
         </>
       )}
     </div>

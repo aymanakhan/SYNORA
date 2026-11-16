@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import type { PetCommand } from '../health/types';
-import { parseVoiceCommand } from './voice';
+import type { PetCommand, PetSpecies } from '../health/types';
+import { parseVoiceCommand, voiceHints } from './voice';
 
 // Minimal typing for the (still vendor-prefixed) Web Speech API.
 interface SpeechRecognitionLike {
@@ -26,7 +26,8 @@ function getCtor(): Ctor | undefined {
  * phrase, and never continuously. Browser speech services may send audio to
  * the browser vendor's servers and may need internet, which the UI discloses.
  */
-export function VoiceControl({ onCommand }: { onCommand: (cmd: PetCommand, source: string) => void }) {
+export function VoiceControl({ onCommand, species }: { onCommand: (cmd: PetCommand, source: string) => void; species?: PetSpecies }) {
+  const hints = voiceHints(species).map((w) => `“${w}”`);
   const Ctor = getCtor();
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState<string>();
@@ -35,7 +36,7 @@ export function VoiceControl({ onCommand }: { onCommand: (cmd: PetCommand, sourc
   const rec = useRef<SpeechRecognitionLike>();
 
   if (!Ctor) {
-    return <p className="text-xs text-text-muted">Voice commands are not supported in this browser. The buttons and keys 1–6 work.</p>;
+    return <p className="text-xs text-text-muted">Voice commands are not supported in this browser. The buttons and keys 1–5 work.</p>;
   }
 
   const listen = () => {
@@ -50,12 +51,12 @@ export function VoiceControl({ onCommand }: { onCommand: (cmd: PetCommand, sourc
     r.onresult = (e) => {
       const text = e.results[0]?.[0]?.transcript ?? '';
       setHeard(text);
-      const cmd = parseVoiceCommand(text);
+      const cmd = parseVoiceCommand(text, species);
       if (cmd) {
-        setResult(`→ ${cmd}`);
+        setResult(`→ ${species === 'axolotl' && cmd === 'stand' ? 'float' : cmd}`);
         onCommand(cmd, 'voice');
       } else {
-        setResult('No pet command recognised. Try “sit”, “jump” or “float”.');
+        setResult(`No pet command recognised. Try ${hints.slice(0, 3).join(', ')}.`);
       }
     };
     r.onerror = (e) => {
@@ -93,7 +94,7 @@ export function VoiceControl({ onCommand }: { onCommand: (cmd: PetCommand, sourc
         ) : (
           <button onClick={listen} className="rounded border border-cyan/60 px-2 py-1 text-cyan">🎙 Push to talk</button>
         )}
-        <span className="text-text-muted">Say “sit”, “stand”, “jump”, “pet”, “play” or “float”.</span>
+        <span className="text-text-muted">Say {hints.slice(0, -1).join(', ')} or {hints[hints.length - 1]}.</span>
       </div>
       {heard !== undefined && (
         <p className="mt-2">Heard: “{heard}” <strong>{result}</strong></p>
