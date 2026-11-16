@@ -53,6 +53,7 @@ const CHARTS: { metric: MetricId; title: string }[] = [
 const RANGES = [
   { id: '7', label: '7 days', ms: 7 * DAY },
   { id: '14', label: '14 days', ms: 14 * DAY },
+  { id: '30', label: '30 days', ms: 30 * DAY },
   { id: 'all', label: 'All', ms: Infinity },
 ] as const;
 
