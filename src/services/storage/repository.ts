@@ -24,6 +24,9 @@ export interface HealthRepository {
   deleteCheckIn(id: string): Promise<void>;
   listCheckIns(profileId: string, opts?: { synthetic?: boolean }): Promise<CheckIn[]>;
 
+  /** Insert many records in one go (one transaction where supported). */
+  bulkAdd(measurements: Measurement[], checkIns: CheckIn[]): Promise<void>;
+
   /** Delete records for a profile (all, or only synthetic/real ones). */
   clearRecords(profileId: string, opts?: { synthetic?: boolean }): Promise<void>;
 }
@@ -69,6 +72,10 @@ export class MemoryRepository implements HealthRepository {
   }
   async addCheckIn(c: CheckIn) {
     this.checkIns.set(c.id, structuredClone(c));
+  }
+  async bulkAdd(ms: Measurement[], cs: CheckIn[]) {
+    for (const m of ms) this.measurements.set(m.id, structuredClone(m));
+    for (const c of cs) this.checkIns.set(c.id, structuredClone(c));
   }
   async getCheckIn(id: string) {
     const c = this.checkIns.get(id);

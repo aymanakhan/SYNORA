@@ -76,6 +76,12 @@ export class IndexedDbRepository implements HealthRepository {
   async addCheckIn(c: CheckIn) {
     await this.db.put('checkIns', c);
   }
+  async bulkAdd(ms: Measurement[], cs: CheckIn[]) {
+    const tx = this.db.transaction(['measurements', 'checkIns'], 'readwrite');
+    const mStore = tx.objectStore('measurements');
+    const cStore = tx.objectStore('checkIns');
+    await Promise.all([...ms.map((m) => mStore.put(m)), ...cs.map((c) => cStore.put(c)), tx.done]);
+  }
   getCheckIn(id: string) {
     return this.db.get('checkIns', id);
   }

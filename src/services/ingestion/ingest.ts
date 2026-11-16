@@ -38,6 +38,35 @@ export async function ingestMeasurement(
   return { status: 'saved', measurement: m };
 }
 
+/**
+ * Validate many readings and check-ins through the SAME rules as single
+ * ingestion, then store all valid ones in one batch. Duplicate checks are
+ * skipped, so only use this after clearing the target records (e.g. when
+ * rebuilding the simulated mission). Returns the number rejected.
+ */
+export async function ingestBatch(
+  raws: RawMeasurementInput[],
+  rawCheckIns: RawCheckInInput[],
+  ctx: ValidationContext,
+  repo: HealthRepository,
+): Promise<{ saved: number; rejected: number }> {
+  const ms: Measurement[] = [];
+  const cs: CheckIn[] = [];
+  let rejected = 0;
+  for (const raw of raws) {
+    const v = validateMeasurement(raw, ctx);
+    if (v.ok) ms.push(v.measurement);
+    else rejected++;
+  }
+  for (const raw of rawCheckIns) {
+    const v = validateCheckIn(raw, ctx);
+    if (v.ok) cs.push(v.checkIn);
+    else rejected++;
+  }
+  await repo.bulkAdd(ms, cs);
+  return { saved: ms.length + cs.length, rejected };
+}
+
 const notEditable = (message: string) => ({ status: 'rejected' as const, errors: [{ field: 'source' as const, message }] });
 
 /**

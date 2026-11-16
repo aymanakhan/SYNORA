@@ -12,10 +12,11 @@ import type {
   RawCheckInInput,
   RawMeasurementInput,
 } from '../features/health/types';
-import { MISSION_DAYS, generateDay, generateWindow, radiationHistory, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
+import { MISSION_DAYS, generateDay, generateWindow, simulatedNow, type ScenarioId } from '../features/simulation/scenarios';
 import {
   deleteManualCheckIn,
   deleteManualMeasurement,
+  ingestBatch,
   ingestCheckIn,
   ingestMeasurement,
   updateCheckIn as updateCheckInRecord,
@@ -224,16 +225,22 @@ export function SynoraProvider({ children }: { children: ReactNode }) {
       enqueue(async () => {
         const prev = loadedSim.current;
         const appendOnly = prev && prev.scenarioId === scenarioId && day === prev.day + 1;
-        const days = appendOnly ? [generateDay(scenarioId, day)] : generateWindow(scenarioId, day);
-        if (!appendOnly) await r.clearRecords(PROFILE_ID, { synthetic: true });
         const now = simulatedNow(day);
-        // Full dosimeter history so the cumulative mission dose is complete.
-        if (!appendOnly) {
-          for (const raw of radiationHistory(scenarioId, days[0].day)) await ingestMeasurement(raw, { profileId: PROFILE_ID, now }, r);
-        }
-        for (const d of days) {
+        if (appendOnly) {
+          const d = generateDay(scenarioId, day);
           for (const raw of d.measurements) await ingestMeasurement(raw, { profileId: PROFILE_ID, now }, r);
           await ingestCheckIn(d.checkIn, { profileId: PROFILE_ID, now }, r);
+        } else {
+          // Rebuild the WHOLE mission so far (day 1 … day), so Trends "All" and the
+          // cumulative radiation dose cover the full mission. Same validation, one batch.
+          await r.clearRecords(PROFILE_ID, { synthetic: true });
+          const days = generateWindow(scenarioId, day, day);
+          await ingestBatch(
+            days.flatMap((d) => d.measurements),
+            days.map((d) => d.checkIn),
+            { profileId: PROFILE_ID, now },
+            r,
+          );
         }
         loadedSim.current = { scenarioId, day };
         setLastUpdate({ at: Date.now(), kind: 'simulated-day', label: `Mission day ${day} readings received` });
