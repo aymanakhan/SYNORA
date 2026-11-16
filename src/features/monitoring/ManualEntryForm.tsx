@@ -3,7 +3,8 @@ import { useSynora } from '../../app/state';
 import { LearnMore } from '../../components/LearnMore';
 import { Button } from '../../components/ui';
 import { formatUnit, formatValue } from '../../lib/format';
-import { METRICS } from '../health/metrics';
+import { BLOOD_PRESSURE_PLAUSIBLE, METRICS } from '../health/metrics';
+import { rangeInUnit } from '../../services/ingestion/units';
 import type { MetricId } from '../health/types';
 import type { ValidationError } from '../../services/ingestion/validate';
 
@@ -142,6 +143,14 @@ export function ManualEntryForm() {
           <input className={inputCls} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} required />
         </label>
       )}
+      <p className="text-[11px] text-text-muted">
+        {metric === 'bloodPressure'
+          ? `Accepted: systolic ${BLOOD_PRESSURE_PLAUSIBLE.systolic.min}–${BLOOD_PRESSURE_PLAUSIBLE.systolic.max}, diastolic ${BLOOD_PRESSURE_PLAUSIBLE.diastolic.min}–${BLOOD_PRESSURE_PLAUSIBLE.diastolic.max} mmHg (input check, not a health range).`
+          : (() => {
+              const r = rangeInUnit(metric, unit);
+              return r ? `Accepted: ${r.min}–${r.max} ${r.unit.replace('scale 1–5', '')} (input check, not a health range).` : null;
+            })()}
+      </p>
       {errFor('value') && <p className="text-xs text-attention" role="alert">{errFor('value')}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">

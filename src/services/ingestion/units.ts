@@ -41,6 +41,31 @@ export type UnitResult =
   | { ok: true; value: number; unit: string; converted: boolean }
   | { ok: false; error: string };
 
+/** Convert a canonical value back to the unit the user typed (for messages and hints). */
+export function fromCanonical(metric: MetricId, value: number, unit: string): number {
+  switch (`${metric}:${canonicalizeUnitSpelling(unit) ?? unit}`) {
+    case 'bodyTemperature:°F':
+      return (value * 9) / 5 + 32;
+    case 'bloodGlucose:mmol/L':
+      return value / GLUCOSE_MG_DL_PER_MMOL_L;
+    case 'sleepDuration:min':
+      return value * 60;
+    case 'radiationDose:µSv':
+      return value * 1000;
+    default:
+      return value;
+  }
+}
+
+/** Allowed input range for a metric expressed in the given unit, e.g. "77–109.4 °F". */
+export function rangeInUnit(metric: MetricId, unit: string): { min: number; max: number; unit: string } | undefined {
+  const r = METRICS[metric].plausibleRange;
+  if (!r) return undefined;
+  const u = canonicalizeUnitSpelling(unit) ?? METRICS[metric].canonicalUnit;
+  const round = (n: number) => Number(n.toFixed(2));
+  return { min: round(fromCanonical(metric, r.min, u)), max: round(fromCanonical(metric, r.max, u)), unit: u };
+}
+
 /**
  * Convert a scalar value in `unit` to the metric's canonical unit.
  * No rounding is applied, so precision is preserved for storage.
